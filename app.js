@@ -240,16 +240,14 @@ window.doDel       = doDel;
 window.renderAll();
 
 // ── PA Login Credentials ───────────────────────────────────────────────────
+// Schema matches the Leader app exactly:
+//   collections: pa_credentials (primary) + pa_users, users, pa_logins (mirrors)
+//   doc id      = phone number
+//   fields      : name, paName, phone, phoneNumber, pass, password, role,
+//                 status, designation, createdBy, updatedAt, id
 const PA_KEY = "leaderPaCredentials";
-const PA_SEED_IDS = ["pa_ramesh","pa_suresh","pa_priya"];
-const PA_SEEDS = [
-  { id:"pa_ramesh", name:"PA Ramesh", phone:"9876500001", designation:"Personal Assistant",
-    password:"Ramesh@123", status:"ACTIVE" },
-  { id:"pa_suresh", name:"PA Suresh", phone:"9876500002", designation:"Personal Assistant",
-    password:"Suresh@123", status:"ACTIVE" },
-  { id:"pa_priya",  name:"PA Priya",  phone:"9876500003", designation:"Personal Assistant",
-    password:"Priya@123",  status:"ACTIVE" }
-];
+const PA_PRIMARY = "pa_credentials";
+const PA_MIRRORS = ["pa_users", "users", "pa_logins"];
 
 let paStore = {};
 const paReveal = new Set();        // ids with password currently visible
@@ -260,37 +258,50 @@ let paCloudReady = false;
 let paToastTimer = null;
 let cfCb = null;
 
+// read helpers — tolerate both spellings the app writes
+function paName(t){ return String(t.name || t.paName || "").trim(); }
+function paPhone(t){ return String(t.phone || t.phoneNumber || "").trim(); }
+function paPass(t){ return String(t.password != null ? t.password : (t.pass || "")); }
+function paStatus(t){ return String(t.status || "Active"); }
+function paIsActive(t){ return !/^revoked$/i.test(paStatus(t)); }
+
+// the exact document the Leader app stores (mirrored field pairs)
+function paCloudDoc(t){
+  const name = paName(t);
+  const phone = paPhone(t);
+  return {
+    name: name,
+    paName: name,
+    phone: phone,
+    phoneNumber: phone,
+    pass: paPass(t),
+    password: paPass(t),
+    role: t.role || "PA",
+    status: paIsActive(t) ? "Active" : "Revoked",
+    designation: String(t.designation || "Personal Assistant"),
+    createdBy: String(t.createdBy || "Admin Leader Portal"),
+    updatedAt: Date.now(),
+    id: phone
+  };
+}
+
 function paLoad(){
   let raw = null;
   try { raw = localStorage.getItem(PA_KEY); } catch(e) { raw = null; }
-  if(raw !== null){
-    try {
-      const arr = JSON.parse(raw);
-      if(Array.isArray(arr)) arr.forEach(t => { if(t && t.id) paStore[t.id] = t; });
-    } catch(e) {}
-    return; // never re-seed once the key exists (even when the list was cleared)
-  }
-  paSeedLocal();
-}
-
-function paSeedLocal(){
-  const now = Date.now();
-  PA_SEEDS.forEach((s,i) => {
-    const id = PA_SEED_IDS[i];
-    if(!paStore[id]){
-      paStore[id] = Object.assign({}, s, { id, createdAt: now + i });
-      paLocalOnly.add(id);
-    }
-  });
-  paSave();
+  if(raw === null) return; // never seeded — the list only holds leader-granted credentials
+  try {
+    const arr = JSON.parse(raw);
+    if(Array.isArray(arr)) arr.forEach(t => {
+      if(!t) return;
+      t.id = String(t.id || t.phone || t.phoneNumber || "").trim();
+      // app schema: doc id is always the phone number — ignore legacy/local seeds
+      if(/^[0-9+]{7,15}$/.test(t.id)) paStore[t.id] = t;
+    });
+  } catch(e) {}
 }
 
 function paSave(){
   try { localStorage.setItem(PA_KEY, JSON.stringify(Object.values(paStore))); } catch(e) {}
-}
-
-function paNextId(){
-  return "pa_" + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
 }
 
 function setPaSync(text, color){
@@ -327,8 +338,8 @@ function renderPaList(){
   const sum  = document.getElementById("pa-sum");
   if(!list) return;
   const all = Object.values(paStore)
-    .sort((a,b) => String(a.name||"").localeCompare(String(b.name||"")));
-  const active = all.filter(t => t.status !== "REVOKED").length;
+    .sort((a,b) => paName(a).localeCompare(paName(b)));
+  const active = all.filter(paIsActive).length;
   const revoked = all.length - active;
   if(cnt){
     cnt.textContent = all.length;
@@ -339,30 +350,30 @@ function renderPaList(){
       (revoked ? " · " + revoked + " revoked" : "")
     : "";
   if(!all.length){
-    list.innerHTML = '<div class="pa-empty">No PA credentials yet — create one above to grant access.</div>';
+    list.innerHTML = '<div class="pa-empty">No PA credentials yet — grant access above. Credentials sync in real time with the Leader app Firestore.</div>';
     return;
   }
   list.innerHTML = all.map(t => {
     const shown = paReveal.has(t.id);
-    const isActive = t.status !== "REVOKED";
-    const initial = String(t.name||"?").replace(/^PA\s*/i,"").charAt(0).toUpperCase() || "?";
+    const isActive = paIsActive(t);
+    const initial = paName(t).replace(/^PA\s*/i,"").charAt(0).toUpperCase() || "?";
     const masked = "••••••••";
     return `<div class="pa-row${isActive?"":" revoked"}">
       <div class="pa-av">${esc(initial)}</div>
       <div class="pa-info">
-        <div class="pa-name">${esc(t.name)}
+        <div class="pa-name">${esc(paName(t))}
           <span class="sbadge ${isActive?"s-sv":"s-rv"}">${isActive?"✓ ACTIVE":"⊘ REVOKED"}</span>
         </div>
-        <div class="pa-desg">${esc(t.designation||"Personal Assistant")}</div>
+        <div class="pa-desg">${esc(t.designation||"Personal Assistant")}${t.createdBy?" · by "+esc(t.createdBy):""}</div>
         <div class="pa-cred">
           <div class="cred">
             <span class="cred-lbl">Phone</span>
-            <span class="cred-val">${esc(t.phone||"—")}</span>
+            <span class="cred-val">${esc(paPhone(t)||"—")}</span>
             <button class="iconbtn" title="Copy phone" onclick="paCopy('phone','${esc(t.id)}')">${ICON_COPY}</button>
           </div>
           <div class="cred">
             <span class="cred-lbl">Password</span>
-            <span class="cred-val">${shown ? esc(t.password) : masked}</span>
+            <span class="cred-val">${shown ? esc(paPass(t)) : masked}</span>
             <button class="iconbtn" title="${shown?"Hide":"Show"} password" onclick="paTogglePw('${esc(t.id)}')">${shown?ICON_EYE_OFF:ICON_EYE}</button>
             <button class="iconbtn" title="Copy password" onclick="paCopy('password','${esc(t.id)}')">${ICON_COPY}</button>
           </div>
@@ -382,7 +393,7 @@ function renderPaList(){
 function paCopy(field, id){
   const t = paStore[id];
   if(!t) return;
-  const val = String(t[field] || "");
+  const val = field === "phone" ? paPhone(t) : paPass(t);
   const done = () => toast("Copied " + field);
   if(navigator.clipboard && navigator.clipboard.writeText){
     navigator.clipboard.writeText(val).then(done).catch(() => paFallbackCopy(val, done));
@@ -423,11 +434,11 @@ function paGenerate(){
 }
 
 function paFillForm(t){
-  document.getElementById("pa-name").value  = t.name || "";
-  document.getElementById("pa-phone").value = t.phone || "";
+  document.getElementById("pa-name").value  = paName(t);
+  document.getElementById("pa-phone").value = paPhone(t);
   document.getElementById("pa-desg").value  = t.designation || "";
-  document.getElementById("pa-pass").value  = t.password || "";
-  document.getElementById("pa-status").value = t.status || "ACTIVE";
+  document.getElementById("pa-pass").value  = paPass(t);
+  document.getElementById("pa-status").value = paIsActive(t) ? "ACTIVE" : "REVOKED";
   paEditId = t.id;
   document.getElementById("pa-save-txt").textContent = "Save Changes";
   document.getElementById("pa-cancel").style.display = "";
@@ -455,33 +466,62 @@ function paCancelEdit(){
 
 function paSubmit(){
   const name = document.getElementById("pa-name").value.trim();
-  const phone = document.getElementById("pa-phone").value.trim();
+  const phone = document.getElementById("pa-phone").value.replace(/[\s\-().]/g, "");
   const desg = document.getElementById("pa-desg").value.trim();
   const pass = document.getElementById("pa-pass").value;
   const status = document.getElementById("pa-status").value;
   if(name.length < 2) return paErr("PA name is required (min 2 characters).");
-  if(!/^[0-9+\-\s()]{7,15}$/.test(phone)) return paErr("Enter a valid phone number (7–15 digits).");
+  if(!/^[0-9+]{7,15}$/.test(phone)) return paErr("Enter a valid phone number (7–15 digits).");
   if(!pass.trim()) return paErr("Password is required — type one or click Generate.");
   paErr("");
 
   if(paEditId){
-    const t = paStore[paEditId];
+    const oldId = paEditId;
+    const t = paStore[oldId];
     if(!t) return paCancelEdit();
-    t.name = name; t.phone = phone;
-    t.designation = desg || "Personal Assistant";
-    t.password = pass; t.status = status;
+    const newId = phone;
+    if(newId !== oldId && paStore[newId]) return paErr("A credential with this phone number already exists.");
+    delete paStore[oldId];
+    paReveal.delete(oldId);
+    paLocalOnly.delete(oldId);
+    Object.assign(t, {
+      id: newId, name, paName: name,
+      phone, phoneNumber: phone,
+      password: pass, pass: pass,
+      designation: desg || "Personal Assistant",
+      status: status === "REVOKED" ? "REVOKED" : "ACTIVE",
+      role: t.role || "PA",
+      createdBy: t.createdBy || "Admin Leader Portal"
+    });
+    delete t.createdAt;
+    t.updatedAt = Date.now();
+    paStore[newId] = t;
+    paLocalOnly.add(newId);
+    if(newId !== oldId){
+      paReveal.delete(oldId);
+      paPendingDeletes.add(oldId);
+      paRemoveRemote(oldId);
+    }
     paSave();
-    paPush(paEditId);
+    paPush(newId);
     toast("Credential updated");
     paCancelEdit();
   } else {
-    const id = paNextId();
-    paStore[id] = { id, name, phone,
+    if(paStore[phone]) return paErr("A credential with this phone number already exists.");
+    const t = {
+      id: phone, name, paName: name,
+      phone, phoneNumber: phone,
+      password: pass, pass: pass,
       designation: desg || "Personal Assistant",
-      password: pass, status, createdAt: Date.now() };
-    paLocalOnly.add(id);
+      status: status === "REVOKED" ? "REVOKED" : "ACTIVE",
+      role: "PA",
+      createdBy: "Admin Leader Portal",
+      updatedAt: Date.now()
+    };
+    paStore[phone] = t;
+    paLocalOnly.add(phone);
     paSave();
-    paPush(id);
+    paPush(phone);
     toast("Credential created — access granted");
     paCancelEdit();
   }
@@ -497,19 +537,21 @@ function paTogglePw(id){
 function paToggleStatus(id){
   const t = paStore[id];
   if(!t) return;
-  t.status = t.status === "REVOKED" ? "ACTIVE" : "REVOKED";
-  if(t.status === "REVOKED") paReveal.delete(id);
+  const wasActive = paIsActive(t);
+  t.status = wasActive ? "REVOKED" : "ACTIVE";
+  t.updatedAt = Date.now();
+  if(wasActive) paReveal.delete(id);
   paSave();
   paPush(id);
   renderPaList();
-  toast(t.name + (t.status === "REVOKED" ? " access revoked" : " access restored"));
+  toast(paName(t) + (wasActive ? " access revoked" : " access restored"));
 }
 
 function paAskDelete(id){
   const t = paStore[id];
   if(!t) return;
   openConfirm("Delete PA Credential?",
-    "This removes " + t.name + "'s login from this portal and from the pa_credentials collection in Firestore.",
+    "This removes " + paName(t) + "'s login from this portal and from the pa_credentials, pa_users, users and pa_logins collections in Firestore.",
     () => {
       delete paStore[id];
       paReveal.delete(id);
@@ -558,13 +600,14 @@ window._paHydrate = function(docs){
       // cloud already has credentials → it wins; keep pending local creations
       const pending = [...paLocalOnly]
         .map(id => paStore[id])
-        .filter(t => t && PA_SEED_IDS.indexOf(t.id) === -1);
+        .filter(t => t && /^[0-9+]{7,15}$/.test(String(t.id)));
       const dels = [...paPendingDeletes];
       paStore = {};
       docs.forEach(d => { if(dels.indexOf(d.id) === -1) paStore[d.id] = d; });
       paLocalOnly.clear();
       paPendingDeletes.clear();
       pending.forEach(t => {
+        if(paStore[t.id]) return;
         paStore[t.id] = t;
         paLocalOnly.add(t.id);
         paPush(t.id);
@@ -575,10 +618,14 @@ window._paHydrate = function(docs){
       setPaSync("☁ Synced", "#4ADE80");
       return;
     }
-    // cloud empty → seed (local store may also be empty after a full wipe)
-    if(!Object.keys(paStore).length) paSeedLocal();
-    Object.keys(paStore).forEach(id => { if(!paPendingDeletes.has(id)) paPush(id); });
+    // cloud empty → push leader-granted credentials held locally (no seeds exist)
+    Object.keys(paStore).forEach(id => {
+      if(paPendingDeletes.has(id)) return;
+      paLocalOnly.add(id);
+      paPush(id);
+    });
     [...paPendingDeletes].forEach(id => paRemoveRemote(id));
+    paPendingDeletes.clear();
     paSave();
     renderPaList();
     setPaSync("☁ Synced", "#4ADE80");
@@ -832,13 +879,30 @@ window._listeners   = [];
 
   startListening();
 
-  // ── PA credentials: real-time sync with the pa_credentials collection ──
-  const paCol = collection(db, "pa_credentials");
-  window._paSet = (id, data) => setDoc(doc(paCol, id), Object.assign({}, data, { id }));
-  window._paDel = id => deleteDoc(doc(paCol, id));
+  // ── PA credentials: real-time sync with the Leader app collections ──────
+  // Writes the app's exact document shape to pa_credentials + its mirrors.
+  window._paSet = async (id, data) => {
+    const payload = paCloudDoc(data);
+    await setDoc(doc(db, PA_PRIMARY, id), payload);
+    const rs = await Promise.allSettled(
+      PA_MIRRORS.map(c => setDoc(doc(db, c, id), payload))
+    );
+    rs.forEach((r, i) => {
+      if(r.status === "rejected")
+        console.warn("PA mirror write skipped:", PA_MIRRORS[i], r.reason && r.reason.message);
+    });
+  };
+  window._paDel = async id => {
+    await deleteDoc(doc(db, PA_PRIMARY, id));
+    const rs = await Promise.allSettled(PA_MIRRORS.map(c => deleteDoc(doc(db, c, id))));
+    rs.forEach((r, i) => {
+      if(r.status === "rejected")
+        console.warn("PA mirror delete skipped:", PA_MIRRORS[i], r.reason && r.reason.message);
+    });
+  };
   setPaSync("⟳ Syncing…", "#F5C542");
   try {
-    onSnapshot(paCol,
+    onSnapshot(collection(db, PA_PRIMARY),
       snap => {
         const docs = snap.docs.map(d => Object.assign({ id: d.id }, d.data() || {}));
         window._paHydrate(docs);
