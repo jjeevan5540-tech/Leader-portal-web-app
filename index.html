@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Leader Portal</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- TOP BAR -->
+<header class="topbar">
+  <div class="tb-l">
+    <div class="shield">
+      <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>
+    </div>
+    <span class="app-title">Leader Portal</span>
+    <span class="adm-badge">ADMIN</span>
+  </div>
+  <div class="tb-r">
+    <button class="tb-icon" onclick="openPaModal()" title="PA Login Credentials">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="8.5" cy="12" r="3.5"/>
+        <path d="M12 12h9"/>
+        <path d="M17.5 12v3.5"/>
+        <path d="M20.5 12v2.5"/>
+      </svg>
+      <span class="cnt" id="pa-count">0</span>
+    </button>
+    <button class="logout-btn" onclick="openLogout()">
+      <svg viewBox="0 0 24 24"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5-5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
+      Logout
+    </button>
+  </div>
+</header>
+
+<!-- MAIN -->
+<main class="main">
+  <!-- Dashboard -->
+  <div id="dash" style="display:none">
+    <p class="sec-title">Dashboard</p>
+    <div class="metrics">
+      <div class="mcard">
+        <div class="mcard-top"><span class="mlabel">Total Tickets</span>
+          <div class="micon" style="background:#F1F5F9">
+            <svg viewBox="0 0 24 24" fill="var(--navy)"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2zm-7 0a1 1 0 110 2 1 1 0 010-2zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+          </div></div>
+        <div class="mval" id="s-total">0</div>
+        <div class="msub">Raised in constituency</div>
+      </div>
+      <div class="mcard">
+        <div class="mcard-top"><span class="mlabel">Issue Solved</span>
+          <div class="micon" style="background:var(--sgb)">
+            <svg viewBox="0 0 24 24" fill="var(--sg)"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+          </div></div>
+        <div class="mval" id="s-solved" style="color:var(--sg)">0</div>
+        <div class="msub" id="s-rate">0% Resolution Rate</div>
+      </div>
+      <div class="mcard">
+        <div class="mcard-top"><span class="mlabel">Issue Unsolved</span>
+          <div class="micon" style="background:var(--urb)">
+            <svg viewBox="0 0 24 24" fill="var(--ur)"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+          </div></div>
+        <div class="mval" id="s-unsolved" style="color:var(--ur)">0</div>
+        <div class="msub">Pending / in progress</div>
+      </div>
+      <div class="mcard">
+        <div class="mcard-top"><span class="mlabel">Personal / Issue</span>
+          <div class="micon" style="background:var(--ppb)">
+            <svg viewBox="0 0 24 24" fill="var(--pp)"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+          </div></div>
+        <div class="mval" id="s-pi" style="color:var(--pp)">0 / 0</div>
+        <div class="msub">Personal vs Public issues</div>
+      </div>
+    </div>
+
+    <p class="tbl-title">Ticket Table Overview</p>
+
+    <!-- Search + filters -->
+    <div class="toolbar">
+      <div class="search-wrap">
+        <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 10-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1114 9.5 4.5 4.5 0 019.5 14z"/></svg>
+        <input id="q" type="search" placeholder="Search name, phone, ticket ID, subject or location…" autocomplete="off" />
+        <button class="search-clear" id="q-clear" type="button" title="Clear search">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+
+      <div class="fctl">
+        <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+        <select id="f-cat">
+          <option value="ALL">All Categories</option>
+          <option value="PERSONAL">Personal</option>
+          <option value="ISSUE">Issue</option>
+        </select>
+      </div>
+
+      <div class="fctl">
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+        <select id="f-status">
+          <option value="ALL">All Status</option>
+          <option value="SOLVED">Solved</option>
+          <option value="UNSOLVED">Unsolved</option>
+        </select>
+      </div>
+
+      <div class="fctl">
+        <svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm4.24 16L11 13V7h1.5v5.25l4.5 2.67-1.76 1.08z"/></svg>
+        <select id="f-date">
+          <option value="ALL">All Time</option>
+          <option value="TODAY">Today</option>
+          <option value="WEEK">Last 7 Days</option>
+          <option value="MONTH">This Month</option>
+        </select>
+      </div>
+
+      <div class="fctl">
+        <svg viewBox="0 0 24 24"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg>
+        <select id="f-sort">
+          <option value="DATE_DESC">Date &amp; Time (Newest)</option>
+          <option value="DATE_ASC">Date &amp; Time (Oldest)</option>
+          <option value="ID_ASC">Ticket ID (Asc)</option>
+          <option value="ID_DESC">Ticket ID (Desc)</option>
+          <option value="STATUS">Status (Unsolved First)</option>
+        </select>
+      </div>
+
+      <button class="fclear" id="f-clear" type="button">
+        <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        Clear Filters
+      </button>
+    </div>
+
+    <div class="tbl-card">
+      <div class="tbl-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:90px">Ticket ID</th>
+              <th style="width:155px">Name</th>
+              <th style="width:155px">Phone Number</th>
+              <th style="width:100px">Category</th>
+              <th style="width:175px">Date &amp; Time</th>
+              <th style="width:110px">Status</th>
+              <th style="width:110px">Action</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <div class="tbl-foot" id="tbl-foot">Showing 0 tickets</div>
+    </div>
+  </div>
+
+  <!-- Empty state -->
+  <div id="empty-state" class="empty-card">
+    <div class="empty-icon">
+      <svg viewBox="0 0 24 24"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2zm-7 0a1 1 0 110 2 1 1 0 010-2zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+    </div>
+    <div class="empty-title">Dashboard is Empty</div>
+    <div class="empty-sub">No tickets recorded yet. Tickets submitted via the Ticket Portal will appear here automatically.</div>
+  </div>
+</main>
+
+<!-- TICKET DETAIL MODAL -->
+<div class="ov" id="tkt-modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="mhdr">
+      <div class="mhdr-l">
+        <span class="mcode" id="m-code"></span>
+        <span id="m-cat"></span>
+        <span id="m-status"></span>
+      </div>
+      <div class="mhdr-r">
+        <button class="ibtn del-btn" onclick="confirmDel()" title="Delete Ticket">
+          <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+        </button>
+        <button class="ibtn cl-btn" onclick="closeModal()" title="Close">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="mbody">
+      <div class="icard">
+        <div class="cit-name" id="m-name"></div>
+        <div class="cit-lbl">Submitter / Citizen</div>
+        <div class="cit-ph" id="m-phone"></div>
+        <hr class="divider">
+        <div class="meta-row">
+          <div class="meta-i">
+            <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z"/></svg>
+            <span id="m-loc"></span>
+          </div>
+          <div class="meta-pa" id="m-pa"></div>
+        </div>
+        <div class="meta-dt">
+          <svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm4.24 16L11 13V7h1.5v5.25l4.5 2.67-1.76 1.08z"/></svg>
+          <span id="m-date"></span>
+        </div>
+      </div>
+      <div class="dcard">
+        <div class="dtitle">Description</div>
+        <div class="dtext" id="m-desc"></div>
+        <div class="rbox" id="m-rbox" style="display:none">
+          <div class="rlbl">Resolution Notes:</div>
+          <div class="rtxt" id="m-res"></div>
+        </div>
+      </div>
+      <div class="st-banner" id="m-banner">
+        <div class="st-bann-l">
+          <svg viewBox="0 0 24 24" id="m-ban-icon"></svg>
+          <span class="st-text" id="m-ban-text"></span>
+        </div>
+        <span id="m-ban-badge"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DELETE CONFIRM -->
+<div class="ov" id="del-ov" onclick="if(event.target===this)closeDelOv()">
+  <div class="cdlg">
+    <div class="cdlg-title">Delete Ticket?</div>
+    <div class="cdlg-text" id="del-text"></div>
+    <div class="cdlg-act">
+      <button class="btn-cl" onclick="closeDelOv()">Cancel</button>
+      <button class="btn-del" onclick="doDel()">Delete Everywhere</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOGOUT CONFIRM -->
+<div class="ov" id="lo-ov" onclick="if(event.target===this)closeLogout()">
+  <div class="cdlg">
+    <div class="cdlg-title">Logout of Leader Console?</div>
+    <div class="cdlg-text">You will return to the login screen.</div>
+    <div class="cdlg-act">
+      <button class="btn-cl" onclick="closeLogout()">Cancel</button>
+      <button class="btn-lo" onclick="doLogout()">Logout</button>
+    </div>
+  </div>
+</div>
+
+<!-- PA CREDENTIALS MODAL -->
+<div class="ov" id="pa-ov" onclick="if(event.target===this)closePaModal()">
+  <div class="modal pa-modal">
+    <div class="mhdr">
+      <div class="mhdr-l">
+        <span class="mcode">PA Credentials</span>
+        <span class="pa-sync" id="pa-sync">⟳ Connecting…</span>
+      </div>
+      <div class="mhdr-r">
+        <button class="ibtn cl-btn" onclick="closePaModal()" title="Close">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="mbody">
+      <div class="pa-form">
+        <div class="pf-grid">
+          <div>
+            <label class="pf-lbl" for="pa-name">PA Name</label>
+            <input id="pa-name" class="pf-in" placeholder="e.g. PA Ramesh" autocomplete="off" />
+          </div>
+          <div>
+            <label class="pf-lbl" for="pa-phone">Phone Number</label>
+            <input id="pa-phone" class="pf-in" type="tel" placeholder="10-digit mobile" autocomplete="off" />
+          </div>
+        </div>
+        <div class="pf-grid">
+          <div>
+            <label class="pf-lbl" for="pa-desg">Designation</label>
+            <input id="pa-desg" class="pf-in" placeholder="e.g. Personal Assistant" autocomplete="off" />
+          </div>
+          <div>
+            <label class="pf-lbl" for="pa-pass">Password</label>
+            <div class="pw-wrap">
+              <input id="pa-pass" class="pf-in" placeholder="Type or generate" autocomplete="off" />
+              <button type="button" class="mini" onclick="paGenerate()" title="Generate password">
+                <svg viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+                Generate
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="pf-grid">
+          <div>
+            <label class="pf-lbl" for="pa-status">Status</label>
+            <select id="pa-status" class="pf-in">
+              <option value="ACTIVE">ACTIVE — access granted</option>
+              <option value="REVOKED">REVOKED — access blocked</option>
+            </select>
+          </div>
+        </div>
+        <div class="pf-err" id="pa-err"></div>
+        <div class="pf-actions">
+          <button type="button" class="btn-cl" id="pa-cancel" style="display:none" onclick="paCancelEdit()">Cancel</button>
+          <button type="button" class="btn-add" id="pa-save" onclick="paSubmit()">
+            <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            <span id="pa-save-txt">Add Credential</span>
+          </button>
+        </div>
+      </div>
+      <div class="pa-sum" id="pa-sum"></div>
+      <div class="pa-list" id="pa-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- GENERIC CONFIRM -->
+<div class="ov" id="confirm-ov" onclick="if(event.target===this)closeConfirm()">
+  <div class="cdlg">
+    <div class="cdlg-title" id="cf-title"></div>
+    <div class="cdlg-text" id="cf-text"></div>
+    <div class="cdlg-act">
+      <button class="btn-cl" onclick="closeConfirm()">Cancel</button>
+      <button class="btn-del" id="cf-ok">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast">
+  <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+  <span id="toast-txt"></span>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

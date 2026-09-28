@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Leader Portal — Login</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --navy:#0F2A5C;--navy-dk:#071A3E;--navy-md:#132F4C;--gold:#F5C542;
+      --nd:#334155;--nm:#64748B;--sb:#E2E8F0;
+      --ur:#dc2626;--urb:#fef2f2;--urbr:#fca5a5;
+    }
+    body{
+      font-family:'Segoe UI',system-ui,sans-serif;color:var(--nd);min-height:100vh;
+      background:linear-gradient(180deg,var(--navy-dk) 0%,var(--navy) 55%,var(--navy-md) 100%);
+      display:flex;align-items:center;justify-content:center;padding:24px;
+    }
+    .wrap{width:100%;max-width:440px;text-align:center}
+
+    .emblem{width:90px;height:90px;margin:0 auto 16px;border-radius:50%;
+      border:2px solid var(--gold);display:flex;align-items:center;justify-content:center;
+      background:radial-gradient(circle,rgba(245,197,66,.25) 0%,rgba(245,197,66,0) 70%)}
+    .emblem svg{width:48px;height:48px;fill:var(--gold)}
+
+    .brand{font-size:24px;font-weight:900;color:#fff;letter-spacing:2px}
+    .tagline{font-size:13px;color:rgba(255,255,255,.9);margin-top:6px}
+
+    .card{background:#fff;border-radius:20px;padding:26px 24px;margin-top:28px;
+      box-shadow:0 20px 60px rgba(0,0,0,.35);text-align:left}
+    .card-title{font-size:18px;font-weight:700;color:var(--navy);text-align:center}
+    .card-sub{font-size:12px;color:var(--nd);text-align:center;margin-top:4px;margin-bottom:18px}
+
+    .err{display:none;background:var(--urb);border:1px solid var(--urbr);border-radius:8px;
+      padding:9px 12px;margin-bottom:12px;font-size:12px;font-weight:600;color:var(--ur);
+      align-items:center;gap:8px}
+    .err.show{display:flex}
+    .err svg{width:16px;height:16px;fill:var(--ur);flex-shrink:0}
+
+    .helper{display:flex;align-items:center;gap:10px;background:rgba(15,42,92,.06);
+      border:1px solid rgba(15,42,92,.2);border-radius:10px;padding:10px 12px;
+      cursor:pointer;margin-bottom:16px;transition:background .15s}
+    .helper:hover{background:rgba(15,42,92,.1)}
+    .helper svg{width:18px;height:18px;fill:var(--gold);flex-shrink:0}
+    .helper-t{font-size:12px;font-weight:700;color:var(--navy)}
+    .helper-s{font-size:12px;font-weight:600;color:var(--nd);margin-top:2px}
+
+    .field{margin-bottom:14px}
+    .lbl{display:block;font-size:12px;font-weight:700;color:var(--navy);margin-bottom:6px}
+    .inp-wrap{position:relative;display:flex;align-items:center}
+    .inp-wrap>svg{position:absolute;left:12px;width:17px;height:17px;fill:var(--navy);pointer-events:none}
+    input{width:100%;font-family:inherit;font-size:14px;color:var(--nd);
+      border:1px solid var(--sb);border-radius:12px;padding:12px 42px 12px 38px;
+      outline:none;transition:border-color .15s,box-shadow .15s;background:#fff}
+    input:focus{border-color:var(--navy);box-shadow:0 0 0 3px rgba(15,42,92,.12)}
+    .toggle{position:absolute;right:8px;background:none;border:none;cursor:pointer;
+      width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+    .toggle:hover{background:#F1F5F9}
+    .toggle svg{width:18px;height:18px;fill:var(--nm);position:static}
+
+    .submit{width:100%;height:50px;background:var(--navy);color:#fff;border:none;
+      border-radius:12px;font-family:inherit;font-size:14px;font-weight:700;
+      letter-spacing:1px;cursor:pointer;margin-top:8px;transition:opacity .15s}
+    .submit:hover{opacity:.9}
+    .submit:disabled{opacity:.6;cursor:not-allowed}
+
+    .foot{font-size:12px;color:rgba(255,255,255,.85);margin-top:26px;text-align:center}
+    .hint{font-size:11px;color:rgba(255,255,255,.55);margin-top:8px;text-align:center}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="emblem">
+      <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 15l-4-4 1.41-1.41L10 13.17l6.59-6.59L18 8l-8 8z"/></svg>
+    </div>
+    <h1 class="brand">LEADER PORTAL</h1>
+    <p class="tagline">Constituency Management &amp; Grievance Console</p>
+
+    <form class="card" id="login-form" autocomplete="off" novalidate>
+      <div class="card-title">Leader Authentication</div>
+      <div class="card-sub">Sign in to access your administrative dashboard</div>
+
+      <div class="err" id="err">
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+        <span id="err-text"></span>
+      </div>
+
+      <div class="helper" id="helper" role="button" tabindex="0">
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+        <div>
+          <div class="helper-t">Portal Access Credentials (Tap to fill):</div>
+          <div class="helper-s">Role: Leader | Phone: 8978925540</div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="lbl" for="phone">Leader Phone Number</label>
+        <div class="inp-wrap">
+          <svg viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+          <input id="phone" name="phone" type="tel" inputmode="numeric" placeholder="8978925540" />
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="lbl" for="password">Password</label>
+        <div class="inp-wrap">
+          <svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+          <input id="password" name="password" type="password" placeholder="Enter password" />
+          <button class="toggle" id="toggle" type="button" title="Show password">
+            <svg id="eye" viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8a3 3 0 100 6 3 3 0 000-6z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <button class="submit" id="submit" type="submit">LOGIN TO DASHBOARD</button>
+    </form>
+
+    <p class="foot">Authorized Access Only &bull; Leader Portal Administration</p>
+    <p class="hint">Session is stored locally in this browser until you log out.</p>
+  </div>
+
+<script>
+(function(){
+  var SESSION_KEY = "leaderPortalSession";
+  var LEADER_PHONE = "8978925540";
+
+  try {
+    if (localStorage.getItem(SESSION_KEY)) { window.location.replace("index.html"); return; }
+  } catch(e) {}
+
+  var form    = document.getElementById("login-form");
+  var phone   = document.getElementById("phone");
+  var pass    = document.getElementById("password");
+  var err     = document.getElementById("err");
+  var errText = document.getElementById("err-text");
+  var submit  = document.getElementById("submit");
+
+  function showErr(msg){ errText.textContent = msg; err.classList.add("show"); }
+  function clearErr(){ err.classList.remove("show"); }
+
+  phone.addEventListener("input", clearErr);
+  pass.addEventListener("input", clearErr);
+
+  document.getElementById("helper").addEventListener("click", fill);
+  document.getElementById("helper").addEventListener("keydown", function(e){
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fill(); }
+  });
+  function fill(){
+    phone.value = LEADER_PHONE;
+    pass.value  = "vishnu123";
+    clearErr();
+  }
+
+  document.getElementById("toggle").addEventListener("click", function(){
+    var showing = pass.type === "text";
+    pass.type = showing ? "password" : "text";
+    this.title = showing ? "Show password" : "Hide password";
+  });
+
+  form.addEventListener("submit", function(e){
+    e.preventDefault();
+    clearErr();
+
+    var cleanPhone = phone.value.replace(/[^0-9]/g, "");
+    var password   = pass.value;
+
+    if (!cleanPhone) { showErr("Please enter phone number"); phone.focus(); return; }
+    if (!password.trim()) { showErr("Please enter password"); pass.focus(); return; }
+    if (cleanPhone !== LEADER_PHONE) {
+      showErr("Invalid phone number. Leader phone: " + LEADER_PHONE);
+      phone.focus(); return;
+    }
+
+    submit.disabled = true;
+    submit.textContent = "SIGNING IN…";
+
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify({
+        phone: LEADER_PHONE,
+        name: "Vishnu",
+        designation: "Leader / Admin",
+        loggedInAt: Date.now()
+      }));
+    } catch(e) {}
+
+    setTimeout(function(){ window.location.replace("index.html"); }, 250);
+  });
+})();
+</script>
+</body>
+</html>
