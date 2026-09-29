@@ -588,9 +588,32 @@ function paPush(id){
   });
 }
 
+const PA_DEL_MAX = 4;
+const paDelTries = new Map();
+
+// Removes the credential from every Firestore collection and keeps retrying
+// until the cloud confirms the document is gone (the other app mirrors it live).
 function paRemoveRemote(id){
-  if(!window._paDel) return;
-  window._paDel(id).catch(e => console.warn("PA delete failed:", e.message));
+  if(!window._paDel){
+    (window._paDelQueue = window._paDelQueue || new Set()).add(id);
+    setPaSync("⟳ Deleting…", "#F5C542");
+    return;
+  }
+  window._paDel(id).then(() => {
+    paDelTries.delete(id);
+    setPaSync("☁ Synced", "#4ADE80");
+  }).catch(e => {
+    const n = (paDelTries.get(id) || 0) + 1;
+    paDelTries.set(id, n);
+    console.warn("PA delete failed:", e.message);
+    if(n < PA_DEL_MAX && paPendingDeletes.has(id)){
+      setPaSync("⚠ Delete failed — retrying", "#FCA5A5");
+      setTimeout(() => { if(paPendingDeletes.has(id)) paRemoveRemote(id); }, 2000);
+    } else {
+      setPaSync("⚠ Delete failed — retrying on sync", "#FCA5A5");
+      toast("Firestore delete pending — will retry");
+    }
+  });
 }
 
 window._paHydrate = function(docs){
@@ -639,12 +662,12 @@ window._paHydrate = function(docs){
     paStore[d.id] = d;
     paLocalOnly.delete(d.id);
   });
+  // an id we removed locally is no longer in paStore — walk the pending set instead
+  [...paPendingDeletes].forEach(id => {
+    if(remoteIds.has(id)) paRemoveRemote(id);   // cloud still has it → delete again
+    else paPendingDeletes.delete(id);           // confirmed gone everywhere
+  });
   Object.keys(paStore).forEach(id => {
-    if(paPendingDeletes.has(id)){
-      if(remoteIds.has(id)) paRemoveRemote(id);
-      else paPendingDeletes.delete(id);
-      return;
-    }
     if(!remoteIds.has(id)){
       if(paLocalOnly.has(id)) paPush(id);   // not visible in the cloud yet → retry
       else delete paStore[id];              // deleted from another device
@@ -689,7 +712,7 @@ window._listeners   = [];
   }
 
   const { initializeApp } = await import("https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js");
-  const { getFirestore, collection, onSnapshot, deleteDoc, doc, setDoc } =
+  const { getFirestore, collection, onSnapshot, deleteDoc, doc, setDoc, getDoc, getDocs, query, where } =
     await import("https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js");
 
   // ─── Firebase project config (personal-assisstant-c28f1) ────────────────
@@ -893,13 +916,43 @@ window._listeners   = [];
     });
   };
   window._paDel = async id => {
-    await deleteDoc(doc(db, PA_PRIMARY, id));
-    const rs = await Promise.allSettled(PA_MIRRORS.map(c => deleteDoc(doc(db, c, id))));
-    rs.forEach((r, i) => {
-      if(r.status === "rejected")
-        console.warn("PA mirror delete skipped:", PA_MIRRORS[i], r.reason && r.reason.message);
-    });
+    const cols = [PA_PRIMARY, ...PA_MIRRORS];
+
+    // 1) delete the document itself (doc id = phone number)
+    for (const c of cols){
+      try { await deleteDoc(doc(db, c, id)); }
+      catch(e){ console.warn("PA delete:", c, e.message); }
+    }
+
+    // 2) purge any doc that merely stores this phone in its fields
+    for (const c of cols){
+      for (const f of ["phone", "phoneNumber"]){
+        try {
+          const snap = await getDocs(query(collection(db, c), where(f, "==", id)));
+          if(snap.size) await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+        } catch(e){ console.warn("PA purge:", c, f, e.message); }
+      }
+    }
+
+    // 3) verify — throw so the caller retries until the cloud is really clean
+    const left = [];
+    for (const c of cols){
+      try {
+        const s = await getDoc(doc(db, c, id));
+        if(s.exists()) left.push(c);
+        for (const f of ["phone", "phoneNumber"]){
+          const snap = await getDocs(query(collection(db, c), where(f, "==", id)));
+          if(snap.size && left.indexOf(c) === -1) left.push(c);
+        }
+      } catch(e){ left.push(c + " (verify failed: " + e.message + ")"); }
+    }
+    if(left.length) throw new Error("still present in " + left.join(", "));
   };
+
+  // flush deletes queued before the SDK finished loading
+  const queuedDeletes = window._paDelQueue;
+  window._paDelQueue = null;
+  if(queuedDeletes && queuedDeletes.size) queuedDeletes.forEach(id => paRemoveRemote(id));
   setPaSync("⟳ Syncing…", "#F5C542");
   try {
     onSnapshot(collection(db, PA_PRIMARY),
