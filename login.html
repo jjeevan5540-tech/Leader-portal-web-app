@@ -124,7 +124,7 @@
 (function(){
   var SESSION_KEY = "leaderPortalSession";
   var LEADER_PHONE = "8978925540";              // default leader phone (hint / prefill)
-  var LEADER_COLLECTIONS = ["leaders", "users"]; // where leader credentials are stored
+  var LEADER_COLLECTIONS = ["admin_credentials"]; // admin sign-in records (the only one login reads)
 
   try {
     if (localStorage.getItem(SESSION_KEY)) { window.location.replace("index.html"); return; }

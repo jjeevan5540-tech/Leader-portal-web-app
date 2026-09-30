@@ -279,13 +279,18 @@ window.renderAll();
 
 // ── PA Login Credentials ───────────────────────────────────────────────────
 // Schema matches the Leader app exactly:
-//   collections: pa_credentials (primary) + pa_users, users, pa_logins (mirrors)
+//   collections: pa_credentials only (no mirror collections)
 //   doc id      = phone number
 //   fields      : name, paName, phone, phoneNumber, pass, password, role,
 //                 status, designation, createdBy, updatedAt, id
 const PA_KEY = "leaderPaCredentials";
+// ── Firestore collections: this app may only ever touch these three ────────
+//   admin_credentials : leader / admin sign-in records (read by login.html)
+//   pa_credentials    : personal assistant records
+//   tickets           : citizen tickets / grievances
+// No mirror or duplicate collections are created — duplicates are forbidden.
 const PA_PRIMARY = "pa_credentials";
-const PA_MIRRORS = ["pa_users", "users", "pa_logins"];
+const PA_MIRRORS = [];
 
 let paStore = {};
 const paReveal = new Set();        // ids with password currently visible
@@ -589,7 +594,7 @@ function paAskDelete(id){
   const t = paStore[id];
   if(!t) return;
   openConfirm("Delete PA Credential?",
-    "This removes " + paName(t) + "'s login from this portal and from the pa_credentials, pa_users, users and pa_logins collections in Firestore.",
+    "This removes " + paName(t) + "'s login from this portal and from the pa_credentials collection in Firestore.",
     () => {
       delete paStore[id];
       paReveal.delete(id);
@@ -770,11 +775,9 @@ window._listeners   = [];
   const db  = getFirestore(app);
   window._db = db;
 
-  const COLLECTIONS = [
-    "tickets","Tickets","grievances","Grievances",
-    "requests","Requests","issues","Issues",
-    "complaints","Complaints","citizen_tickets","pa_tickets"
-  ];
+  // Tickets live in exactly one collection. This app listens to (and can only
+  // ever delete from) that collection — never to mirror/duplicate ones.
+  const COLLECTIONS = [ "tickets" ];
 
   // ── helpers ──────────────────────────────────────────────────────────────
   function norm(k) { return k.toLowerCase().replace(/[\s_\-]/g,""); }
