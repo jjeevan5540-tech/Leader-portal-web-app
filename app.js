@@ -17,7 +17,13 @@ function getSession(){
 window.__signedIn = !!getSession();
 if(!window.__signedIn) window.location.replace("login.html");
 
-let activeCode = null;
+// Identity of the open ticket: always the Firestore document key
+// (collection + "/" + document id), never the human readable ticket code,
+// which is NOT guaranteed to be unique across documents.
+let activeKey = null;
+
+// Stable, unique key for one ticket document.
+function docKeyOf(colName, docId){ return colName + "/" + docId; }
 
 function esc(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;") }
 
@@ -100,8 +106,10 @@ window.renderAll = function(){
   document.getElementById("s-unsolved").textContent=unsolved;
   document.getElementById("s-pi").textContent=personal+" / "+issue;
 
-  document.getElementById("empty-state").style.display = total===0?"":"none";
-  document.getElementById("dash").style.display = total===0?"none":"";
+  // The dashboard must stay on screen at ALL times — even when the ticket
+  // count reaches 0 — so deleting the last ticket never blanks the page.
+  document.getElementById("empty-state").style.display = "none";
+  document.getElementById("dash").style.display = "";
 
   const now = Date.now();
   const tickets = sortList(all.filter(t=>matchesFilters(t, now)));
@@ -118,9 +126,9 @@ window.renderAll = function(){
       <td><div class="td-cit">${esc(t.citizenName)}</div>${pa}</td>
       <td><div class="td-phone"><div class="ph-icon"><svg viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" fill="var(--navy)"/></svg></div><span class="ph-num">${esc(t.phoneNumber||"Not Available")}</span></div></td>
       <td><span class="cbadge ${t.category==="Personal"?"cat-p":"cat-i"}">${esc(t.category)}</span></td>
-      <td style="font-size:12px;color:var(--nd)">${window._fmtDT(t.createdAt)}</td>
+      <td style="font-size:12px;color:var(--nd)">${window._fmtDT?window._fmtDT(t.createdAt):new Date(t.createdAt).toLocaleString()}</td>
       <td><span class="sbadge ${t.isSolved?"s-sv":"s-us"}">${t.isSolved?"✓ Solved":"✗ Unsolved"}</span></td>
-      <td><button class="vbtn" data-code="${esc(t.ticketCode)}"><svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8a3 3 0 100 6 3 3 0 000-6z"/></svg>View Details</button></td>
+      <td><button class="vbtn" data-key="${esc(t.docKey||"")}"><svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8a3 3 0 100 6 3 3 0 000-6z"/></svg>View Details</button></td>
     `;
     tbody.appendChild(tr);
   }
@@ -137,9 +145,9 @@ window.renderAll = function(){
     : "Showing "+total+" ticket"+(total!==1?"s":"");
 };
 
-function openModal(code){
-  const t=window._ticketStore[code]; if(!t) return;
-  activeCode=code;
+function openModal(key){
+  const t=window._ticketStore[key]; if(!t) return;
+  activeKey=key;
   document.getElementById("m-code").textContent=t.ticketCode;
   const catEl=document.getElementById("m-cat");
   catEl.className="cbadge "+(t.category==="Personal"?"cat-p":"cat-i");
@@ -151,7 +159,7 @@ function openModal(code){
   document.getElementById("m-phone").textContent="Phone: "+(t.phoneNumber||"Not Available");
   document.getElementById("m-loc").textContent=t.location;
   document.getElementById("m-pa").textContent="Assigned: "+t.assignedPa;
-  document.getElementById("m-date").textContent="Raised on: "+window._fmtDT(t.createdAt);
+  document.getElementById("m-date").textContent="Raised on: "+(window._fmtDT?window._fmtDT(t.createdAt):new Date(t.createdAt).toLocaleString());
   document.getElementById("m-desc").textContent=t.description||"No description provided.";
   const rbox=document.getElementById("m-rbox");
   if(t.isSolved&&t.resolutionNotes){rbox.style.display="";document.getElementById("m-res").textContent=t.resolutionNotes;}
@@ -173,21 +181,51 @@ function openModal(code){
   }
   document.getElementById("tkt-modal").classList.add("open");
 }
-function closeModal(){ document.getElementById("tkt-modal").classList.remove("open"); activeCode=null; }
+function closeModal(){ document.getElementById("tkt-modal").classList.remove("open"); activeKey=null; }
 
 function confirmDel(){
-  if(!activeCode) return;
-  document.getElementById("del-text").textContent=`This will delete ticket ${activeCode} from the Leader Portal and Firestore database.`;
+  const t = activeKey ? window._ticketStore[activeKey] : null;
+  if(!activeKey || !t) return;
+  document.getElementById("del-text").textContent=`This will delete ticket ${t.ticketCode} from the Leader Portal and Firestore database.`;
   document.getElementById("del-ov").classList.add("open");
 }
 function closeDelOv(){ document.getElementById("del-ov").classList.remove("open"); }
 async function doDel(){
   closeDelOv();
-  if(!activeCode) return;
-  await window.deleteTicketFromFirestore(activeCode);
-  delete window._ticketStore[activeCode];
+  const key = activeKey;
+  const ticket = key ? window._ticketStore[key] : null;
+  if(!key || !ticket) return;
+
+  const info = window._colMap[key]
+    || (ticket.colName && ticket.docId ? { colName: ticket.colName, docId: ticket.docId } : null);
+
+  if(typeof window.deleteTicketFromFirestore !== "function"){
+    toast("Still connecting to Firestore — please try again in a moment");
+    return;
+  }
+  if(!info || !info.colName || !info.docId){
+    toast("Ticket document reference not found — nothing was deleted");
+    return;
+  }
+
   closeModal();
+
+  // Drop exactly this one ticket from local state and repaint, so the
+  // dashboard keeps rendering with the remaining tickets.
+  delete window._ticketStore[key];
+  delete window._colMap[key];
   window.renderAll();
+
+  try {
+    await window.deleteTicketFromFirestore(info);
+  } catch(e){
+    console.error("Delete error:", e);
+    // The write never reached Firestore → put the ticket back untouched.
+    window._ticketStore[key] = ticket;
+    window._colMap[key] = info;
+    window.renderAll();
+    toast("Ticket could not be deleted — it was restored");
+  }
 }
 
 function openLogout(){ document.getElementById("lo-ov").classList.add("open"); }
@@ -226,8 +264,8 @@ window.doDel       = doDel;
   }
   document.getElementById("f-clear").addEventListener("click", resetFilters);
   document.getElementById("tbody").addEventListener("click", function(e){
-    const btn = e.target.closest ? e.target.closest("button[data-code]") : null;
-    if(btn) openModal(btn.getAttribute("data-code"));
+    const btn = e.target.closest ? e.target.closest("button[data-key]") : null;
+    if(btn) openModal(btn.getAttribute("data-key"));
   });
   document.addEventListener("keydown", function(e){
     if(e.key === "/" && document.activeElement !== q &&
@@ -864,15 +902,21 @@ window._listeners   = [];
           anyOk = true;
           snap.docChanges().forEach(change => {
             const docId = change.doc.id;
-            const data  = change.doc.data ? change.doc.data() : {};
+            // One store entry per Firestore document, keyed by its unique
+            // document path. The derived ticket code is display data only —
+            // it can repeat across documents, so it must never be the identity.
+            const key = docKeyOf(colName, docId);
             if (change.type === "removed") {
-              const t = fromDoc(docId, data);
-              delete window._ticketStore[t.ticketCode];
-              delete window._colMap[t.ticketCode];
+              delete window._ticketStore[key];
+              delete window._colMap[key];
             } else {
+              const data  = change.doc.data ? change.doc.data() : {};
               const t = fromDoc(docId, data);
-              window._ticketStore[t.ticketCode] = t;
-              window._colMap[t.ticketCode] = { colName, docId };
+              t.docKey = key;
+              t.colName = colName;
+              t.docId   = docId;
+              window._ticketStore[key] = t;
+              window._colMap[key] = { colName, docId };
             }
           });
           window.renderAll();
@@ -893,11 +937,22 @@ window._listeners   = [];
     }
   }
 
-  window.deleteTicketFromFirestore = async function(code) {
-    const info = window._colMap[code];
-    if (!info) return;
-    try { await deleteDoc(doc(db, info.colName, info.docId)); }
-    catch(e) { console.error("Delete error:", e); }
+  // Deletes exactly ONE Firestore document: the selected ticket's own
+  // document (collection + document id). It never touches a collection, a
+  // parent document, the dashboard, or any other ticket/PA/user record.
+  window.deleteTicketFromFirestore = async function(target){
+    let info = null;
+    if(target && typeof target === "object" && target.colName && target.docId){
+      info = target;                                   // explicit {colName, docId}
+    } else {
+      const t = window._ticketStore[target];
+      info = window._colMap[target]
+        || (t && t.colName && t.docId ? { colName: t.colName, docId: t.docId } : null);
+    }
+    if(!info || !info.colName || !info.docId){
+      throw new Error("No Firestore document reference for ticket " + target);
+    }
+    await deleteDoc(doc(db, info.colName, info.docId));
   };
 
   startListening();
