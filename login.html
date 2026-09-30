@@ -90,7 +90,7 @@
         <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
         <div>
           <div class="helper-t">Portal Access Credentials (Tap to fill):</div>
-          <div class="helper-s">Role: Leader | Phone: 8978925540</div>
+          <div class="helper-s" id="helper-s">Role: Leader | Phone: 8978925540</div>
         </div>
       </div>
 
@@ -123,7 +123,8 @@
 <script>
 (function(){
   var SESSION_KEY = "leaderPortalSession";
-  var LEADER_PHONE = "8978925540";
+  var LEADER_PHONE = "8978925540";              // default leader phone (hint / prefill)
+  var LEADER_COLLECTIONS = ["leaders", "users"]; // where leader credentials are stored
 
   try {
     if (localStorage.getItem(SESSION_KEY)) { window.location.replace("index.html"); return; }
@@ -135,9 +136,19 @@
   var err     = document.getElementById("err");
   var errText = document.getElementById("err-text");
   var submit  = document.getElementById("submit");
+  var helperS = document.getElementById("helper-s");
 
   function showErr(msg){ errText.textContent = msg; err.classList.add("show"); }
   function clearErr(){ err.classList.remove("show"); }
+
+  // Keep only digits and drop a leading country/area zero: "91 8978925540"
+  // and "08978925540" must match the stored phone number.
+  function normPhone(v){
+    var d = String(v || "").replace(/[^0-9]/g, "");
+    if (d.length === 12 && d.indexOf("91") === 0) d = d.slice(2);
+    if (d.length === 11 && d.charAt(0) === "0")   d = d.slice(1);
+    return d;
+  }
 
   phone.addEventListener("input", clearErr);
   pass.addEventListener("input", clearErr);
@@ -146,11 +157,6 @@
   document.getElementById("helper").addEventListener("keydown", function(e){
     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fill(); }
   });
-  function fill(){
-    phone.value = LEADER_PHONE;
-    pass.value  = "vishnu123";
-    clearErr();
-  }
 
   document.getElementById("toggle").addEventListener("click", function(){
     var showing = pass.type === "text";
@@ -158,34 +164,166 @@
     this.title = showing ? "Show password" : "Hide password";
   });
 
+  // ─── Firestore (same dynamic-import pattern as index.html's app.js) ───────
+  var fs = null;         // { db, getDoc, doc, collection, query, where, getDocs }
+  var leaderRecord = null; // leader credentials read from the database
+
+  function initFirestore(){
+    if (fs) return Promise.resolve(fs);
+    return Promise.all([
+      import("https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js"),
+      import("https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js")
+    ]).then(function(mods){
+      var app = mods[0].initializeApp({
+        apiKey: "AIzaSyA1awCWPelB1hKFDYTdh4bxwbB5Zmw35do",
+        authDomain: "personal-assisstant-c28f1.firebaseapp.com",
+        databaseURL: "https://personal-assisstant-c28f1-default-rtdb.firebaseio.com",
+        projectId: "personal-assisstant-c28f1",
+        storageBucket: "personal-assisstant-c28f1.firebasestorage.app",
+        messagingSenderId: "749776543986",
+        appId: "1:749776543986:web:a4f473a0ab2c11038ab06b",
+        measurementId: "G-CJD2BWX3CK"
+      });
+      var api = mods[1];
+      fs = {
+        db:        api.getFirestore(app),
+        getDoc:    api.getDoc,
+        doc:       api.doc,
+        collection: api.collection,
+        query:     api.query,
+        where:     api.where,
+        getDocs:   api.getDocs
+      };
+      return fs;
+    });
+  }
+
+  // Normalize one stored user/leader document into a credential record.
+  function readCred(d){
+    d = d || {};
+    return {
+      phone:       String(d.phone || d.phoneNumber || d.mobile || "").replace(/[^0-9]/g, ""),
+      password:    String(d.password != null ? d.password : (d.pass != null ? d.pass : "")),
+      name:        d.name || d.leaderName || d.username || "Leader",
+      designation: d.designation || d.role || "Leader / Admin",
+      role:        String(d.role || d.userType || ""),
+      status:      String(d.status || "")
+    };
+  }
+
+  function isLeaderRecord(c){
+    var r = c.role.toLowerCase();
+    return !r || r.indexOf("leader") >= 0;
+  }
+  function isActiveRecord(c){
+    var s = c.status.toLowerCase();
+    return !s || s === "active";
+  }
+
+  // Look the leader up in Firestore: exact document ids first, then a query
+  // on the phone field across the leader credential collections.
+  function findLeader(cleanPhone){
+    var lookups = [];
+    LEADER_COLLECTIONS.forEach(function(col){
+      [cleanPhone, "leader_" + cleanPhone].forEach(function(id){
+        lookups.push(function(){
+          return fs.getDoc(fs.doc(fs.db, col, id)).then(function(s){
+            if (!s.exists()) return null;
+            var c = readCred(s.data());
+            return c.phone === cleanPhone ? c : null;
+          });
+        });
+      });
+    });
+
+    function run(i){
+      if (i >= lookups.length) return queryByPhone(0);
+      return lookups[i]().then(function(found){
+        return found || run(i + 1);
+      });
+    }
+
+    function queryByPhone(ci){
+      if (ci >= LEADER_COLLECTIONS.length) return null;
+      var q = fs.query(fs.collection(fs.db, LEADER_COLLECTIONS[ci]), fs.where("phone", "==", cleanPhone));
+      return fs.getDocs(q).then(function(snap){
+        if (snap && snap.size) return readCred(snap.docs[0].data());
+        return queryByPhone(ci + 1);
+      });
+    }
+
+    return run(0);
+  }
+
+  function fill(){
+    if (leaderRecord){
+      phone.value = leaderRecord.phone;
+      pass.value  = leaderRecord.password;
+    } else {
+      phone.value = LEADER_PHONE;
+    }
+    clearErr();
+  }
+
   form.addEventListener("submit", function(e){
     e.preventDefault();
     clearErr();
 
-    var cleanPhone = phone.value.replace(/[^0-9]/g, "");
+    var cleanPhone = normPhone(phone.value);
     var password   = pass.value;
 
     if (!cleanPhone) { showErr("Please enter phone number"); phone.focus(); return; }
     if (!password.trim()) { showErr("Please enter password"); pass.focus(); return; }
-    if (cleanPhone !== LEADER_PHONE) {
-      showErr("Invalid phone number. Leader phone: " + LEADER_PHONE);
-      phone.focus(); return;
-    }
 
     submit.disabled = true;
-    submit.textContent = "SIGNING IN…";
+    submit.textContent = "VERIFYING…";
 
-    try {
-      localStorage.setItem(SESSION_KEY, JSON.stringify({
-        phone: LEADER_PHONE,
-        name: "Vishnu",
-        designation: "Leader / Admin",
-        loggedInAt: Date.now()
-      }));
-    } catch(e) {}
+    initFirestore()
+      .then(function(){ return findLeader(cleanPhone); })
+      .then(function(rec){
+        if (!rec) throw new Error("NO_ACCOUNT");
+        if (!isLeaderRecord(rec)) throw new Error("NOT_LEADER");
+        if (!isActiveRecord(rec)) throw new Error("INACTIVE");
+        if (rec.password !== password) throw new Error("BAD_PASSWORD");
 
-    setTimeout(function(){ window.location.replace("index.html"); }, 250);
+        try {
+          localStorage.setItem(SESSION_KEY, JSON.stringify({
+            phone: rec.phone || cleanPhone,
+            name: rec.name,
+            designation: rec.designation,
+            role: rec.role || "Leader",
+            loggedInAt: Date.now()
+          }));
+        } catch(err) {}
+
+        submit.textContent = "WELCOME, " + String(rec.name).toUpperCase();
+        window.location.replace("index.html");
+      })
+      .catch(function(e){
+        console.error("Login failed:", e);
+        submit.disabled = false;
+        submit.textContent = "LOGIN TO DASHBOARD";
+        var m = e && e.message;
+        if (m === "NO_ACCOUNT" || m === "BAD_PASSWORD" || m === "NOT_LEADER"){
+          showErr("Invalid phone number or password");
+        } else if (m === "INACTIVE"){
+          showErr("This account is inactive. Contact the administrator.");
+        } else {
+          showErr("Cannot verify your credentials right now — check your connection and try again.");
+        }
+      });
   });
+
+  // Preload the stored leader credentials so the hint box shows the phone
+  // kept in Firestore and tap-to-fill uses the stored password.
+  initFirestore()
+    .then(function(){ return findLeader(LEADER_PHONE); })
+    .then(function(rec){
+      if (!rec) return;
+      leaderRecord = rec;
+      helperS.textContent = "Role: " + (rec.role || "Leader") + " | Phone: " + rec.phone;
+    })
+    .catch(function(e){ console.warn("Leader credentials unavailable:", e); });
 })();
 </script>
 </body>
