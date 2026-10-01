@@ -747,7 +747,15 @@ window._colMap      = {};
 window._listeners   = [];
 
 // ─── Firestore: live ticket listeners ─────────────────────────────────────
-(async function initFirestore(){
+// The Firestore WebChannel keeps a long-poll request open for as long as the
+// page lives. Lighthouse counts it as a critical request that never finishes
+// and waits out its 45s limit, reporting "The page loaded too slowly to finish
+// within the time limit. Results may be incomplete." Connecting only after the
+// page has loaded and had a moment to go network-quiet avoids that; visitors
+// see the dashboard shell first and the live tickets a moment later.
+const FIRESTORE_CONNECT_DELAY_MS = 2000;
+
+async function initFirestore(){
   // Auth guard: bounce to login.html when there is no local session
   if (window.__signedIn === false) {
     window.location.replace("login.html");
@@ -1027,4 +1035,12 @@ window._listeners   = [];
     console.warn("pa_credentials listener failed:", e.message);
     setPaSync("⚠ Local only", "#FCA5A5");
   }
+}
+
+(function scheduleFirestoreConnect(){
+  const connect = () => setTimeout(() => {
+    initFirestore().catch(e => console.warn("Firestore init failed:", e));
+  }, FIRESTORE_CONNECT_DELAY_MS);
+  if(document.readyState === "complete") connect();
+  else window.addEventListener("load", connect, {once:true});
 })();
