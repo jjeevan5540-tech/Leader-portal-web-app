@@ -120,13 +120,15 @@ window.renderAll = function(){
   for(const t of tickets){
     const pa = (t.assignedPa&&t.assignedPa!=="PA Assigned"&&t.assignedPa!==t.citizenName)
       ? `<div class="td-pa">PA: ${esc(t.assignedPa)}</div>` : "";
+    const reports = (Array.isArray(t.entries) && t.entries.length) ? t.entries.length : 1;
+    const latestAt = t.latestAt || t.createdAt;
     const tr=document.createElement("tr");
     tr.innerHTML=`
       <td style="font-size:13px;font-weight:800;color:var(--navy)">${esc(t.ticketCode)}</td>
-      <td><div class="td-cit">${esc(t.citizenName)}</div>${pa}</td>
+      <td><div class="td-cit">${esc(t.citizenName)} (${reports} report${reports===1?"":"s"})</div>${pa}</td>
       <td><div class="td-phone"><div class="ph-icon"><svg viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" fill="var(--navy)"/></svg></div><span class="ph-num">${esc(t.phoneNumber||"Not Available")}</span></div></td>
       <td><span class="cbadge ${t.category==="Personal"?"cat-p":"cat-i"}">${esc(t.category)}</span></td>
-      <td style="font-size:12px;color:var(--nd)">${window._fmtDT?window._fmtDT(t.createdAt):new Date(t.createdAt).toLocaleString()}</td>
+      <td style="font-size:12px;color:var(--nd)">${window._fmtDT?window._fmtDT(latestAt):new Date(latestAt).toLocaleString()}</td>
       <td><span class="sbadge ${t.isSolved?"s-sv":"s-us"}">${t.isSolved?"✓ Solved":"✗ Unsolved"}</span></td>
       <td><button class="vbtn" data-key="${esc(t.docKey||"")}"><svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8a3 3 0 100 6 3 3 0 000-6z"/></svg>View Details</button></td>
     `;
@@ -144,6 +146,110 @@ window.renderAll = function(){
     ? "Showing "+shown+" of "+total+" ticket"+(total!==1?"s":"")
     : "Showing "+total+" ticket"+(total!==1?"s":"");
 };
+
+// ── Duplicate ticket merging ───────────────────────────────────────────────
+// A submission joins an existing UNSOLVED ticket when phone, category and
+// subject all match. Solved tickets are never merged into — a fresh report
+// against a closed ticket stays its own document.
+const MERGE_COOLDOWN_MS = 4000;
+const mergeCooldown = new Map();
+const mergingKeys   = new Set();
+
+function ticketMergeKey(t){
+  const phone = String(t.phoneNumber||"").replace(/[^0-9+]/g,"");
+  if(phone.length < 7) return null;            // no reliable identity to match on
+  const subj = String(t.subCategory||"").trim().toLowerCase().replace(/\s+/g," ");
+  if(!subj) return null;
+  // Category is deliberately NOT part of the key: Personal and Issue tickets
+  // live in the same `tickets` collection and must merge with each other when
+  // the phone number and subject match.
+  return phone + "|" + subj;
+}
+
+function dedupeEntries(list){
+  const seen = new Set(), out = [];
+  for(const e of list){
+    if(!e) continue;
+    const k = e.src
+      ? "s:" + e.src
+      : "v:" + String(e.paName||"") + "|" + String(e.description||"") + "|" + String(e.at||"");
+    if(seen.has(k)) continue;
+    seen.add(k);
+    out.push(e);
+  }
+  return out;
+}
+
+// A report entry may never carry an address — strip everything but the four
+// allowed fields at the point where the list is about to be written.
+function allowEntry(e){
+  return {
+    paName: String((e && e.paName) || ""),
+    description: String((e && e.description) || ""),
+    at: Number((e && e.at) || 0),
+    src: String((e && e.src) || "")
+  };
+}
+
+function reconcileTickets(){
+  if(typeof window.mergeTicketEntries !== "function" ||
+     typeof window.deleteTicketFromFirestore !== "function") return;
+
+  const groups = new Map();
+  for(const t of Object.values(window._ticketStore)){
+    if(!t || t.isSolved) continue;             // solved never participates
+    const key = ticketMergeKey(t);
+    if(!key) continue;
+    if(!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(t);
+  }
+
+  for(const [key, members] of groups){
+    if(members.length < 2) continue;
+    if(mergingKeys.has(key)) continue;
+    if(Date.now() - (mergeCooldown.get(key)||0) < MERGE_COOLDOWN_MS) continue;
+    mergingKeys.add(key);
+    mergeCooldown.set(key, Date.now());
+    mergeTicketGroup(key, members).finally(() => mergingKeys.delete(key));
+  }
+}
+
+async function mergeTicketGroup(key, members){
+  // The original ticket wins: earliest creation time, document id as tie-break.
+  const ordered = members.slice().sort((a,b) =>
+    (a.createdAt - b.createdAt) || String(a.docId).localeCompare(String(b.docId)));
+  const base = ordered[0];
+  const rest = ordered.slice(1);
+  let allDeleted = true;
+
+  let entries = dedupeEntries((base.entries||[]).slice());
+  for(const d of rest) entries = entries.concat(d.entries||[]);
+  entries = dedupeEntries(entries).sort((a,b) => (a.at||0) - (b.at||0)).map(allowEntry);
+
+  try {
+    await window.mergeTicketEntries(base.colName, base.docId, entries);
+  } catch(e){
+    console.warn("Ticket merge write failed:", e && e.message);
+    return;                                   // nothing removed locally
+  }
+
+  // The cloud owns the merged list now — drop the duplicates locally so the
+  // dashboard repaints with a single row before the deletes round-trip.
+  base.entries = entries;
+  base.latestAt = entries.reduce((m,e)=>Math.max(m, e.at||0), 0) || base.createdAt;
+  for(const d of rest){
+    delete window._ticketStore[d.docKey];
+    delete window._colMap[d.docKey];
+  }
+  window.renderAll();
+
+  for(const d of rest){
+    try { await window.deleteTicketFromFirestore({ colName: d.colName, docId: d.docId }); }
+    catch(e){ allDeleted = false; console.warn("Ticket merge delete failed:", e && e.message); }
+  }
+  // A clean merge needs no back-off; only a partial one waits before retrying.
+  if(allDeleted) mergeCooldown.delete(key);
+}
 
 function openModal(key){
   const t=window._ticketStore[key]; if(!t) return;
@@ -178,6 +284,30 @@ function openModal(key){
     banIcon.innerHTML='<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>';
     banText.textContent="Status: Unsolved / Pending";
     banBadge.className="sbadge s-us"; banBadge.textContent="✗ Unsolved";
+  }
+  // Reports: every entry the PA Portal contributed, newest first — PA name,
+  // the issue text it typed, and its date/time. Address/location is never
+  // rendered here (it lives once, on the ticket itself), an entry with no
+  // typed text renders no description line, and a lone entry that only repeats
+  // the ticket's own description is hidden so nothing ever shows twice.
+  const repBox  = document.getElementById("m-reports");
+  const repList = document.getElementById("m-report-list");
+  if(repBox && repList){
+    const entries = (Array.isArray(t.entries) ? t.entries : []).slice()
+      .sort((a,b) => (b.at||0) - (a.at||0));
+    const repeatsDescription = entries.length === 1 &&
+      String(entries[0].description||"") === String(t.description||"");
+    const show = entries.length > 0 && !repeatsDescription;
+    repBox.style.display = show ? "" : "none";
+    repList.innerHTML = show ? entries.map((e,i) => {
+      const at = e.at || t.createdAt;
+      const when = window._fmtDT ? window._fmtDT(at) : new Date(at).toLocaleString();
+      const desc = String(e.description||"").trim();
+      return (i ? '<hr class="divider">' : '') +
+        `<div class="meta-pa">${esc(e.paName || t.assignedPa || "PA Assigned")}</div>` +
+        (desc ? `<div class="dtext">${esc(desc)}</div>` : '') +
+        `<div class="meta-dt">${esc(when)}</div>`;
+    }).join("") : "";
   }
   document.getElementById("tkt-modal").classList.add("open");
 }
@@ -862,6 +992,30 @@ async function initFirestore(){
     return Date.now();
   }
 
+  // Report entries: one entry per PA who raised the ticket. An entry is an
+  // ALLOWLIST of exactly four fields — address/location is never carried into
+  // an entry, whatever extra keys the source document happens to have.
+  function parseEntries(raw, fallbackPa, fallbackDesc, fallbackAt) {
+    const out = [];
+    if (Array.isArray(raw)) {
+      raw.forEach(e => {
+        if (!e || typeof e !== "object") return;
+        const at = parseTs(e.at ?? e.createdAt ?? e.timestamp ?? e.date ?? null);
+        const entry = {
+          paName: String(e.paName || e.pa || e.assignedPa || e.raisedBy || "").trim() || fallbackPa,
+          description: String(e.description || e.desc || e.text || e.details || "").trim(),
+          at: at,
+          src: String(e.src || "")
+        };
+        out.push(entry);          // location/address keys are dropped here
+      });
+    }
+    if (!out.length) {
+      out.push({ paName: fallbackPa, description: fallbackDesc || "", at: fallbackAt, src: "" });
+    }
+    return out.sort((a, b) => (a.at || 0) - (b.at || 0));
+  }
+
   function fromDoc(docId, data) {
     const rawCode = extractStr(data,["ticketCode","ticket_code","ticketId","ticket_id","code","id"]) || docId;
     const code = rawCode.startsWith("#") ? rawCode : "#"+rawCode;
@@ -882,8 +1036,11 @@ async function initFirestore(){
     );
     const resolutionNotes = extractStr(data,["resolutionNotes","resolution_notes","notes","remarks",
       "solution","actionTaken","internalNotes","adminNotes","statusNote"]) || "";
+    const entries = parseEntries(data.entries, pa, description, createdAt);
+    const latestAt = entries.reduce((m, e) => Math.max(m, e.at || 0), 0) || createdAt;
     return { ticketCode:code, citizenName, phoneNumber:phone, category, subCategory,
-             description, location, assignedPa:pa, isSolved, createdAt, resolutionNotes };
+             description, location, assignedPa:pa, isSolved, createdAt, resolutionNotes,
+             entries, latestAt };
   }
 
   function fmtDT(ts) {
@@ -926,11 +1083,15 @@ async function initFirestore(){
               t.docKey = key;
               t.colName = colName;
               t.docId   = docId;
+              // Stamp each entry with the document it came from so a merge can
+              // be replayed safely without ever duplicating a report.
+              t.entries.forEach((e, i) => { if (!e.src) e.src = key + "#" + i; });
               window._ticketStore[key] = t;
               window._colMap[key] = { colName, docId };
             }
           });
           window.renderAll();
+          reconcileTickets();
           setFsStatus(
             Object.keys(window._ticketStore).length
               ? "🟢 Firestore Connected"
@@ -964,6 +1125,13 @@ async function initFirestore(){
       throw new Error("No Firestore document reference for ticket " + target);
     }
     await deleteDoc(doc(db, info.colName, info.docId));
+  };
+
+  // Writes the merged report list onto an existing ticket document. Only the
+  // `entries` field is touched — the original ticket code, citizen details and
+  // status stay exactly as they were.
+  window.mergeTicketEntries = async function(colName, docId, entries){
+    await setDoc(doc(db, colName, docId), { entries: entries }, { merge: true });
   };
 
   startListening();
