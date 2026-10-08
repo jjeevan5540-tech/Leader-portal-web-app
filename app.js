@@ -264,7 +264,7 @@ function openModal(key){
   document.getElementById("m-name").textContent=t.citizenName;
   document.getElementById("m-phone").textContent="Phone: "+(t.phoneNumber||"Not Available");
   document.getElementById("m-loc").textContent=t.location;
-  document.getElementById("m-pa").textContent="Assigned: "+t.assignedPa;
+  document.getElementById("m-pa").textContent="Added by: "+t.assignedPa;
   document.getElementById("m-date").textContent="Raised on: "+(window._fmtDT?window._fmtDT(t.createdAt):new Date(t.createdAt).toLocaleString());
   document.getElementById("m-desc").textContent=t.description||"No description provided.";
   const rbox=document.getElementById("m-rbox");
