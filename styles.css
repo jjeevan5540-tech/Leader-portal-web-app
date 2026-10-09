@@ -13,14 +13,9 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
   justify-content:space-between;position:sticky;top:0;z-index:100;
   box-shadow:0 2px 8px rgba(0,0,0,.3)}
 .tb-l{display:flex;align-items:center;gap:12px}
-.shield{width:36px;height:36px;background:var(--gold);border-radius:50%;
-  display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.shield svg{width:20px;height:20px;fill:var(--navy-dk)}
+.shield{width:36px;height:36px;border-radius:50%;display:block;flex-shrink:0}
 .app-title{font-size:18px;font-weight:700;color:#fff}
-.adm-badge{background:var(--gold);color:var(--navy-dk);font-size:10px;font-weight:900;
-  padding:2px 6px;border-radius:4px}
 .tb-r{display:flex;align-items:center;gap:14px}
-#fs-status{font-size:11px;font-weight:600;color:#94A3B8}
 .logout-btn{background:none;border:none;cursor:pointer;color:#fff;opacity:.85;
   display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;
   padding:6px 10px;border-radius:6px;transition:background .15s}
@@ -105,14 +100,6 @@ tbody td{padding:10px 14px;font-size:13px;white-space:nowrap;vertical-align:midd
 .vbtn svg{width:13px;height:13px;fill:#fff}
 .tbl-foot{padding:8px 14px;font-size:11px;font-weight:600;color:var(--nd);
   border-top:1px solid var(--sb)}
-
-/* EMPTY STATE */
-.empty-card{background:#fff;border:1px solid var(--sb);border-radius:12px;padding:48px 24px;text-align:center}
-.empty-icon{width:72px;height:72px;background:#F1F5F9;border-radius:50%;
-  display:flex;align-items:center;justify-content:center;margin:0 auto 16px}
-.empty-icon svg{width:36px;height:36px;fill:#0F1F4D}
-.empty-title{font-size:18px;font-weight:700;color:var(--navy);margin-bottom:8px}
-.empty-sub{font-size:13px;color:var(--nd)}
 
 /* MODAL */
 .ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);

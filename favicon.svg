@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Leader Portal favicon">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#fff1d6"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#2aa3dc"/>
+      <stop offset="1" stop-color="#0b4a78"/>
+    </linearGradient>
+    <linearGradient id="orange" x1="1" y1="0" x2="0.2" y2="1">
+      <stop offset="0" stop-color="#fbbf24"/>
+      <stop offset="1" stop-color="#ea7a0c"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="32" r="30.5" fill="url(#bg)" stroke="#fbbf24" stroke-width="3"/>
+  <g transform="translate(12.3 16.8) scale(0.072)">
+    <path fill="url(#blue)" d="M15 95C20 78 45 66 75 74C150 92 235 148 292 190C240 168 190 148 156 158C138 164 128 176 134 196C150 238 185 278 216 300C212 314 190 316 160 308C90 290 50 235 28 165C20 140 12 112 15 95Z"/>
+    <path fill="url(#orange)" d="M532 8C470 90 390 190 330 245C290 285 220 322 141 345C150 385 185 435 235 446C262 450 285 435 305 410C380 320 470 175 532 8Z"/>
+  </g>
+</svg>

@@ -4,38 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Leader Portal</title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='32' fill='%23fbbf24'/%3E%3Cpath d='M32 16l14 5v12c0 9-6 15-14 19-8-4-14-10-14-19V21z' fill='%230f1235'/%3E%3C/svg%3E" />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <script>
     try { if (!localStorage.getItem("leaderPortalSession")) window.location.replace("login.html"); } catch (e) {}
   </script>
-  <script>
-    // The Firebase telemetry ("heartbeat") SDK persists an IndexedDB database
-    // at this origin, which Lighthouse reports as "stored data affecting
-    // loading performance". Block that probe for this app and drop any copy
-    // left behind by earlier visits (or other apps on this GitHub Pages origin).
-    (function () {
-      var HEARTBEAT_DB = "firebase-heartbeat-database";
-      function isFirebaseProbe(name) {
-        return typeof name === "string" &&
-          (name === HEARTBEAT_DB || name.indexOf("validate-browser-context-for-indexeddb") === 0);
-      }
-      try {
-        var originalOpen = indexedDB.open.bind(indexedDB);
-        indexedDB.open = function (name) {
-          if (isFirebaseProbe(name)) {
-            var err = new Error("Firebase heartbeat IndexedDB storage is disabled");
-            err.name = "InvalidStateError";
-            throw err;
-          }
-          return originalOpen.apply(null, arguments);
-        };
-      } catch (e) {}
-      try {
-        indexedDB.deleteDatabase(HEARTBEAT_DB);
-        indexedDB.deleteDatabase("validate-browser-context-for-indexeddb-analytics-module");
-      } catch (e) {}
-    })();
-  </script>
+  <script src="storage-guard.js"></script>
+  <script src="firebase-config.js"></script>
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
   <link rel="preconnect" href="https://firestore.googleapis.com" />
   <link rel="stylesheet" href="styles.css" />
@@ -45,9 +19,7 @@
 <!-- TOP BAR -->
 <header class="topbar">
   <div class="tb-l">
-    <div class="shield">
-      <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>
-    </div>
+    <img class="shield" src="favicon.svg" alt="" />
     <span class="app-title">Leader Portal</span>
   </div>
   <div class="tb-r">
@@ -183,15 +155,6 @@
       </div>
       <div class="tbl-foot" id="tbl-foot">Showing 0 tickets</div>
     </div>
-  </div>
-
-  <!-- Empty state -->
-  <div id="empty-state" class="empty-card">
-    <div class="empty-icon">
-      <svg viewBox="0 0 24 24"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2zm-7 0a1 1 0 110 2 1 1 0 010-2zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
-    </div>
-    <div class="empty-title">Dashboard is Empty</div>
-    <div class="empty-sub">No tickets recorded yet. Tickets submitted via the Ticket Portal will appear here automatically.</div>
   </div>
 </main>
 

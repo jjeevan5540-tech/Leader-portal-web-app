@@ -25,7 +25,7 @@ let activeKey = null;
 // Stable, unique key for one ticket document.
 function docKeyOf(colName, docId){ return colName + "/" + docId; }
 
-function esc(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;") }
+function esc(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;") }
 
 // ── Filters ────────────────────────────────────────────────────────────────
 const FILTERS = { q:"", cat:"ALL", status:"ALL", date:"ALL", sort:"DATE_DESC" };
@@ -108,7 +108,6 @@ window.renderAll = function(){
 
   // The dashboard must stay on screen at ALL times — even when the ticket
   // count reaches 0 — so deleting the last ticket never blanks the page.
-  document.getElementById("empty-state").style.display = "none";
   document.getElementById("dash").style.display = "";
 
   const now = Date.now();
@@ -398,8 +397,8 @@ window.doDel       = doDel;
     if(btn) openModal(btn.getAttribute("data-key"));
   });
   document.addEventListener("keydown", function(e){
-    if(e.key === "/" && document.activeElement !== q &&
-       !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)){
+    const ae = document.activeElement;
+    if(e.key === "/" && ae !== q && !/^(INPUT|TEXTAREA|SELECT)$/.test(ae ? ae.tagName : "")){
       e.preventDefault(); q.focus();
     }
   });
@@ -883,35 +882,15 @@ window._listeners   = [];
 // within the time limit. Results may be incomplete." Connecting only after the
 // page has loaded and had a moment to go network-quiet avoids that; visitors
 // see the dashboard shell first and the live tickets a moment later.
-const FIRESTORE_CONNECT_DELAY_MS = 2000;
+// The delay itself lives in firebase-config.js (window.FIRESTORE_CONNECT_DELAY_MS).
 
 async function initFirestore(){
-  // Auth guard: bounce to login.html when there is no local session
-  if (window.__signedIn === false) {
-    window.location.replace("login.html");
-    return;
-  }
-
   const { initializeApp } = await import("https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js");
   const { getFirestore, collection, onSnapshot, deleteDoc, doc, setDoc, getDoc, getDocs, query, where } =
     await import("https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js");
 
-  // ─── Firebase project config (personal-assisstant-c28f1) ────────────────
-  const firebaseConfig = {
-    apiKey: "AIzaSyA1awCWPelB1hKFDYTdh4bxwbB5Zmw35do",
-    authDomain: "personal-assisstant-c28f1.firebaseapp.com",
-    databaseURL: "https://personal-assisstant-c28f1-default-rtdb.firebaseio.com",
-    projectId: "personal-assisstant-c28f1",
-    storageBucket: "personal-assisstant-c28f1.firebasestorage.app",
-    messagingSenderId: "749776543986",
-    appId: "1:749776543986:web:a4f473a0ab2c11038ab06b",
-    measurementId: "G-CJD2BWX3CK"
-  };
-  // ─────────────────────────────────────────────────────────────────────────
-
-  const app = initializeApp(firebaseConfig);
+  const app = initializeApp(window.FIREBASE_CONFIG);
   const db  = getFirestore(app);
-  window._db = db;
 
   // Tickets live in exactly one collection. This app listens to (and can only
   // ever delete from) that collection — never to mirror/duplicate ones.
@@ -1052,22 +1031,12 @@ async function initFirestore(){
   window._fmtDT = fmtDT;
 
   // ── Real-time listener ──────────────────────────────────────────────────
-  let anyOk = false;
-
-  function setFsStatus(text, color){
-    const el = document.getElementById("fs-status");
-    if(!el) return;
-    el.textContent = text;
-    el.style.color = color;
-  }
-
   function startListening() {
     for (const unsub of window._listeners) unsub();
     window._listeners = [];
     for (const colName of COLLECTIONS) {
       try {
         const unsub = onSnapshot(collection(db, colName), snap => {
-          anyOk = true;
           snap.docChanges().forEach(change => {
             const docId = change.doc.id;
             // One store entry per Firestore document, keyed by its unique
@@ -1092,17 +1061,8 @@ async function initFirestore(){
           });
           window.renderAll();
           reconcileTickets();
-          setFsStatus(
-            Object.keys(window._ticketStore).length
-              ? "🟢 Firestore Connected"
-              : "🟢 Connected · waiting for tickets",
-            "#16a34a"
-          );
         }, err => {
           console.warn("Firestore error:", colName, err.message);
-          if (!anyOk) {
-            setFsStatus("🔴 Firestore blocked — check security rules", "#dc2626");
-          }
         });
         window._listeners.push(unsub);
       } catch(e) { console.warn("Listener failed:", colName, e); }
@@ -1208,7 +1168,7 @@ async function initFirestore(){
 (function scheduleFirestoreConnect(){
   const connect = () => setTimeout(() => {
     initFirestore().catch(e => console.warn("Firestore init failed:", e));
-  }, FIRESTORE_CONNECT_DELAY_MS);
+  }, window.FIRESTORE_CONNECT_DELAY_MS);
   if(document.readyState === "complete") connect();
   else window.addEventListener("load", connect, {once:true});
 })();

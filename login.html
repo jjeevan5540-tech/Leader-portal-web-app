@@ -4,35 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Leader Portal — Login</title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='32' fill='%23fbbf24'/%3E%3Cpath d='M32 16l14 5v12c0 9-6 15-14 19-8-4-14-10-14-19V21z' fill='%230f1235'/%3E%3C/svg%3E" />
-  <script>
-    // The Firebase telemetry ("heartbeat") SDK persists an IndexedDB database
-    // at this origin, which Lighthouse reports as "stored data affecting
-    // loading performance". Block that probe for this app and drop any copy
-    // left behind by earlier visits (or other apps on this GitHub Pages origin).
-    (function () {
-      var HEARTBEAT_DB = "firebase-heartbeat-database";
-      function isFirebaseProbe(name) {
-        return typeof name === "string" &&
-          (name === HEARTBEAT_DB || name.indexOf("validate-browser-context-for-indexeddb") === 0);
-      }
-      try {
-        var originalOpen = indexedDB.open.bind(indexedDB);
-        indexedDB.open = function (name) {
-          if (isFirebaseProbe(name)) {
-            var err = new Error("Firebase heartbeat IndexedDB storage is disabled");
-            err.name = "InvalidStateError";
-            throw err;
-          }
-          return originalOpen.apply(null, arguments);
-        };
-      } catch (e) {}
-      try {
-        indexedDB.deleteDatabase(HEARTBEAT_DB);
-        indexedDB.deleteDatabase("validate-browser-context-for-indexeddb-analytics-module");
-      } catch (e) {}
-    })();
-  </script>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <script src="storage-guard.js"></script>
+  <script src="firebase-config.js"></script>
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
   <link rel="preconnect" href="https://firestore.googleapis.com" />
   <style>
@@ -49,13 +23,9 @@
     }
     .wrap{width:100%;max-width:440px;text-align:center}
 
-    .emblem{width:90px;height:90px;margin:0 auto 16px;border-radius:50%;
-      border:2px solid var(--gold);display:flex;align-items:center;justify-content:center;
-      background:radial-gradient(circle,rgba(245,197,66,.25) 0%,rgba(245,197,66,0) 70%)}
-    .emblem svg{width:48px;height:48px;fill:var(--gold)}
+    .emblem{width:90px;height:90px;margin:0 auto 16px;border-radius:50%;display:block}
 
     .brand{font-size:24px;font-weight:900;color:#fff;letter-spacing:2px}
-    .tagline{font-size:13px;color:rgba(255,255,255,.9);margin-top:6px}
 
     .card{background:#fff;border-radius:20px;padding:26px 24px;margin-top:28px;
       box-shadow:0 20px 60px rgba(0,0,0,.35);text-align:left}
@@ -67,14 +37,6 @@
       align-items:center;gap:8px}
     .err.show{display:flex}
     .err svg{width:16px;height:16px;fill:var(--ur);flex-shrink:0}
-
-    .helper{display:flex;align-items:center;gap:10px;background:rgba(202,138,4,.06);
-      border:1px solid rgba(202,138,4,.2);border-radius:10px;padding:10px 12px;
-      cursor:pointer;margin-bottom:16px;transition:background .15s}
-    .helper:hover{background:rgba(202,138,4,.1)}
-    .helper svg{width:18px;height:18px;fill:var(--gold);flex-shrink:0}
-    .helper-t{font-size:12px;font-weight:700;color:var(--navy)}
-    .helper-s{font-size:12px;font-weight:600;color:var(--nd);margin-top:2px}
 
     .field{margin-bottom:14px}
     .lbl{display:block;font-size:12px;font-weight:700;color:var(--navy);margin-bottom:6px}
@@ -95,17 +57,16 @@
     .submit:hover{opacity:.9}
     .submit:disabled{opacity:.6;cursor:not-allowed}
 
-    .foot{font-size:12px;color:rgba(255,255,255,.85);margin-top:26px;text-align:center}
-    .hint{font-size:11px;color:rgba(255,255,255,.55);margin-top:8px;text-align:center}
+    .foot{font-size:12px;font-weight:600;color:#fff;margin-top:26px;text-align:center;
+      text-shadow:0 1px 3px rgba(0,0,0,.45)}
+    .hint{font-size:11px;font-weight:500;color:rgba(255,255,255,.92);margin-top:8px;
+      text-align:center;text-shadow:0 1px 3px rgba(0,0,0,.45)}
   </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="emblem">
-      <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 15l-4-4 1.41-1.41L10 13.17l6.59-6.59L18 8l-8 8z"/></svg>
-    </div>
+    <img class="emblem" src="favicon.svg" alt="Leader Portal emblem" />
     <h1 class="brand">LEADER PORTAL</h1>
-    <p class="tagline">Constituency Management &amp; Grievance Console</p>
 
     <form class="card" id="login-form" autocomplete="off" novalidate>
       <div class="card-title">Leader Authentication</div>
@@ -114,14 +75,6 @@
       <div class="err" id="err">
         <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
         <span id="err-text"></span>
-      </div>
-
-      <div class="helper" id="helper" role="button" tabindex="0">
-        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-        <div>
-          <div class="helper-t">Portal Access Credentials (Tap to fill):</div>
-          <div class="helper-s" id="helper-s">Role: Leader | Phone: 8978925540</div>
-        </div>
       </div>
 
       <div class="field">
@@ -153,7 +106,6 @@
 <script>
 (function(){
   var SESSION_KEY = "leaderPortalSession";
-  var LEADER_PHONE = "8978925540";              // default leader phone (hint / prefill)
   var LEADER_COLLECTIONS = ["admin_credentials"]; // admin sign-in records (the only one login reads)
 
   try {
@@ -166,7 +118,6 @@
   var err     = document.getElementById("err");
   var errText = document.getElementById("err-text");
   var submit  = document.getElementById("submit");
-  var helperS = document.getElementById("helper-s");
 
   function showErr(msg){ errText.textContent = msg; err.classList.add("show"); }
   function clearErr(){ err.classList.remove("show"); }
@@ -183,11 +134,6 @@
   phone.addEventListener("input", clearErr);
   pass.addEventListener("input", clearErr);
 
-  document.getElementById("helper").addEventListener("click", fill);
-  document.getElementById("helper").addEventListener("keydown", function(e){
-    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fill(); }
-  });
-
   document.getElementById("toggle").addEventListener("click", function(){
     var showing = pass.type === "text";
     pass.type = showing ? "password" : "text";
@@ -196,7 +142,6 @@
 
   // ─── Firestore (same dynamic-import pattern as index.html's app.js) ───────
   var fs = null;         // { db, getDoc, doc, collection, query, where, getDocs }
-  var leaderRecord = null; // leader credentials read from the database
 
   function initFirestore(){
     if (fs) return Promise.resolve(fs);
@@ -204,16 +149,7 @@
       import("https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js"),
       import("https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js")
     ]).then(function(mods){
-      var app = mods[0].initializeApp({
-        apiKey: "AIzaSyA1awCWPelB1hKFDYTdh4bxwbB5Zmw35do",
-        authDomain: "personal-assisstant-c28f1.firebaseapp.com",
-        databaseURL: "https://personal-assisstant-c28f1-default-rtdb.firebaseio.com",
-        projectId: "personal-assisstant-c28f1",
-        storageBucket: "personal-assisstant-c28f1.firebasestorage.app",
-        messagingSenderId: "749776543986",
-        appId: "1:749776543986:web:a4f473a0ab2c11038ab06b",
-        measurementId: "G-CJD2BWX3CK"
-      });
+      var app = mods[0].initializeApp(window.FIREBASE_CONFIG);
       var api = mods[1];
       fs = {
         db:        api.getFirestore(app),
@@ -285,16 +221,6 @@
     return run(0);
   }
 
-  function fill(){
-    if (leaderRecord){
-      phone.value = leaderRecord.phone;
-      pass.value  = leaderRecord.password;
-    } else {
-      phone.value = LEADER_PHONE;
-    }
-    clearErr();
-  }
-
   form.addEventListener("submit", function(e){
     e.preventDefault();
     clearErr();
@@ -343,30 +269,6 @@
         }
       });
   });
-
-  // Preload the stored leader credentials so the hint box shows the phone
-  // kept in Firestore and tap-to-fill uses the stored password. Deferred
-  // until after the load event so the Firestore WebChannel long-poll (which
-  // stays open forever) doesn't block Lighthouse's network-idle wait — it
-  // otherwise runs into the 45s timeout and reports the page as loading too
-  // slowly. Login submits still connect immediately via initFirestore().
-  var FIRESTORE_CONNECT_DELAY_MS = 2000;
-  function prefillLeader(){
-    initFirestore()
-      .then(function(){ return findLeader(LEADER_PHONE); })
-      .then(function(rec){
-        if (!rec) return;
-        leaderRecord = rec;
-        helperS.textContent = "Role: " + (rec.role || "Leader") + " | Phone: " + rec.phone;
-      })
-      .catch(function(e){ console.warn("Leader credentials unavailable:", e); });
-  }
-  function schedulePrefill(){
-    var run = function(){ setTimeout(prefillLeader, FIRESTORE_CONNECT_DELAY_MS); };
-    if (document.readyState === "complete") run();
-    else window.addEventListener("load", run, {once:true});
-  }
-  schedulePrefill();
 })();
 </script>
 </body>
