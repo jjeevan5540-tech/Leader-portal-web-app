@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ticket Detail</title>
+<style>
+:root{
+  --navy:#CA8A04;--navy-dk:#0F1F4D;--gold:#F5C542;
+  --nd:#334155;--nm:#94A3B8;--sb:#E2E8F0;
+  --sg:#16a34a;--sgb:#f0fdf4;--sgbr:#86efac;
+  --ur:#dc2626;--urb:#fef2f2;--urbr:#fca5a5;
+  --pp:#7C3AED;--ppb:#F5F3FF;--bg:#F1F5F9;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--nd);
+  min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
+
+/* OVERLAY + MODAL */
+.ov{display:flex;position:fixed;inset:0;background:rgba(0,0,0,.55);
+  z-index:200;align-items:center;justify-content:center;padding:16px}
+.modal{background:#fff;border-radius:20px;max-width:540px;width:100%;
+  max-height:90vh;overflow:hidden;display:flex;flex-direction:column;
+  box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.mhdr{background:var(--navy);padding:14px 16px;display:flex;align-items:center;
+  justify-content:space-between;flex-shrink:0}
+.mhdr-l{display:flex;align-items:center;gap:10px}
+.mcode{font-size:18px;font-weight:900;color:#fff}
+.mhdr-r{display:flex;align-items:center;gap:6px}
+.ibtn{background:none;border:none;cursor:pointer;width:32px;height:32px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;transition:background .15s}
+.ibtn:hover{background:rgba(255,255,255,.15)}
+.ibtn svg{width:18px;height:18px}
+.del-btn svg{fill:#FCA5A5}
+.cl-btn svg{fill:#fff}
+.mbody{overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px}
+
+/* BADGES */
+.cbadge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700}
+.cat-p{background:var(--ppb);color:var(--pp);border:1px solid #DDD6FE}
+.cat-i{background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE}
+.sbadge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700}
+.s-sv{background:var(--sgb);color:var(--sg);border:1px solid var(--sgbr)}
+.s-us{background:var(--urb);color:var(--ur);border:1px solid var(--urbr)}
+
+/* CITIZEN CARD */
+.icard{background:#F8FAFC;border:1px solid var(--sb);border-radius:12px;padding:14px}
+.cit-name{font-size:17px;font-weight:700;color:#0F1F4D}
+.cit-lbl{font-size:11px;color:#64748B;font-weight:500;margin-top:2px}
+.cit-ph{font-size:14px;font-weight:600;color:var(--nd);margin-top:8px}
+.divider{border:none;border-top:1px solid var(--sb);margin:10px 0}
+.meta-row{display:flex;align-items:center;justify-content:space-between}
+.meta-i{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--nd);font-weight:500}
+.meta-i svg{width:15px;height:15px;fill:var(--navy);flex-shrink:0}
+.meta-pa{font-size:12px;font-weight:600;color:#0F1F4D}
+.meta-dt{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--nd);
+  font-weight:500;margin-top:8px}
+.meta-dt svg{width:15px;height:15px;fill:var(--navy)}
+
+/* DETAIL CARDS */
+.dcard{background:#fff;border:1px solid var(--sb);border-radius:12px;padding:14px}
+.dtitle{font-size:14px;font-weight:700;color:#0F1F4D;margin-bottom:6px}
+.dtext{font-size:13px;color:var(--nd);line-height:1.6}
+.rbox{margin-top:12px;background:var(--sgb);border:1px solid var(--sgbr);
+  border-radius:8px;padding:10px}
+.rlbl{font-size:11px;font-weight:700;color:var(--sg);margin-bottom:2px}
+.rtxt{font-size:12px;color:var(--nd)}
+
+/* STATUS BANNER */
+.st-banner{border-radius:10px;padding:12px 14px;display:flex;
+  align-items:center;justify-content:space-between}
+.st-bann-l{display:flex;align-items:center;gap:8px}
+.st-banner svg{width:20px;height:20px}
+.st-text{font-size:14px;font-weight:800}
+.sv-ban{background:var(--sgb);border:1px solid var(--sgbr)}
+.sv-ban svg{fill:var(--sg)} .sv-ban .st-text{color:var(--sg)}
+.us-ban{background:var(--urb);border:1px solid var(--urbr)}
+.us-ban svg{fill:var(--ur)} .us-ban .st-text{color:var(--ur)}
+</style>
+</head>
+<body>
+
+<div class="ov" id="tkt-modal">
+  <div class="modal">
+    <div class="mhdr">
+      <div class="mhdr-l">
+        <span class="mcode" id="m-code"></span>
+        <span id="m-cat"></span>
+        <span id="m-status"></span>
+      </div>
+      <div class="mhdr-r">
+        <button class="ibtn del-btn" onclick="alert('Delete Ticket')" title="Delete Ticket">
+          <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+        </button>
+        <button class="ibtn cl-btn" onclick="alert('Close')" title="Close">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="mbody">
+      <div class="icard">
+        <div class="cit-name" id="m-name"></div>
+        <div class="cit-lbl">Submitter / Citizen</div>
+        <div class="cit-ph" id="m-phone"></div>
+        <hr class="divider">
+        <div class="meta-row">
+          <div class="meta-i">
+            <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z"/></svg>
+            <span id="m-loc"></span>
+          </div>
+          <div class="meta-pa" id="m-pa"></div>
+        </div>
+        <div class="meta-dt">
+          <svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm4.24 16L11 13V7h1.5v5.25l4.5 2.67-1.76 1.08z"/></svg>
+          <span id="m-date"></span>
+        </div>
+      </div>
+      <div class="dcard" id="m-addr-card" style="display:none">
+        <div class="dtitle">Address</div>
+        <div class="dtext" id="m-addr"></div>
+      </div>
+      <div class="dcard">
+        <div class="dtitle">Description</div>
+        <div class="dtext" id="m-desc"></div>
+        <div class="rbox" id="m-rbox" style="display:none">
+          <div class="rlbl">Resolution Notes:</div>
+          <div class="rtxt" id="m-res"></div>
+        </div>
+      </div>
+      <div class="dcard" id="m-reports" style="display:none">
+        <div class="dtitle">Reports</div>
+        <div id="m-report-list"></div>
+      </div>
+      <div class="st-banner" id="m-banner">
+        <div class="st-bann-l">
+          <svg viewBox="0 0 24 24" id="m-ban-icon"></svg>
+          <span class="st-text" id="m-ban-text"></span>
+        </div>
+        <span id="m-ban-badge"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const ADDRESS_PREFIX = /^\s*Address\s*:/i;
+
+function esc(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;") }
+function fmtDT(ts){
+  const d = new Date(ts);
+  const p = n => String(n).padStart(2,"0");
+  const h = d.getHours(); const ampm = h>=12?"PM":"AM"; const h12 = h%12||12;
+  return `${p(d.getDate())}-${p(d.getMonth()+1)}-${d.getFullYear()}, ${p(h12)}:${p(d.getMinutes())} ${ampm}`;
+}
+
+function ticketAddress(t){
+  if (t.address) return String(t.address);
+  if (ADDRESS_PREFIX.test(t.description || "")) return String(t.description).trim();
+  return "";
+}
+function ticketIssue(t){
+  if (!t.address && ADDRESS_PREFIX.test(t.description || "")) return "";
+  return String(t.description || "");
+}
+function visibleReports(t){
+  return (Array.isArray(t.entries) ? t.entries : [])
+    .map(e => ({
+      paName: String((e && (e.raisedByPAName || e.paName)) || ""),
+      text:   String((e && (e.text != null ? e.text : e.description)) || "").trim(),
+      at:     Number((e && e.at) || 0)
+    }))
+    .filter(r => r.text && !ADDRESS_PREFIX.test(r.text))
+    .sort((a,b) => b.at - a.at);
+}
+
+function renderTicket(t){
+  document.getElementById("m-code").textContent=t.ticketCode;
+  const catEl=document.getElementById("m-cat");
+  catEl.className="cbadge "+(t.category==="Personal"?"cat-p":"cat-i");
+  catEl.textContent=t.category;
+  const stEl=document.getElementById("m-status");
+  stEl.className="sbadge "+(t.isSolved?"s-sv":"s-us");
+  stEl.textContent=t.isSolved?"✓ Solved":"✗ Unsolved";
+  document.getElementById("m-name").textContent=t.citizenName;
+  document.getElementById("m-phone").textContent="Phone: "+(t.phoneNumber||"Not Available");
+  document.getElementById("m-loc").textContent=t.location;
+  document.getElementById("m-pa").textContent="Added by: "+t.assignedPa;
+  document.getElementById("m-date").textContent="Raised on: "+fmtDT(t.createdAt);
+
+  const addr = ticketAddress(t);
+  const addrCard = document.getElementById("m-addr-card");
+  if(addrCard){
+    addrCard.style.display = addr ? "" : "none";
+    if(addr) document.getElementById("m-addr").textContent = addr;
+  }
+  document.getElementById("m-desc").textContent = ticketIssue(t) || "No issue written";
+
+  const rbox=document.getElementById("m-rbox");
+  if(t.isSolved&&t.resolutionNotes){rbox.style.display="";document.getElementById("m-res").textContent=t.resolutionNotes;}
+  else rbox.style.display="none";
+
+  const ban=document.getElementById("m-banner");
+  const banIcon=document.getElementById("m-ban-icon");
+  const banText=document.getElementById("m-ban-text");
+  const banBadge=document.getElementById("m-ban-badge");
+  if(t.isSolved){
+    ban.className="st-banner sv-ban";
+    banIcon.innerHTML='<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>';
+    banText.textContent="Status: Solved";
+    banBadge.className="sbadge s-sv"; banBadge.textContent="✓ Solved";
+  } else {
+    ban.className="st-banner us-ban";
+    banIcon.innerHTML='<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>';
+    banText.textContent="Status: Unsolved / Pending";
+    banBadge.className="sbadge s-us"; banBadge.textContent="✗ Unsolved";
+  }
+
+  const repBox  = document.getElementById("m-reports");
+  const repList = document.getElementById("m-report-list");
+  if(repBox && repList){
+    const reports = visibleReports(t);
+    repBox.style.display = reports.length ? "" : "none";
+    repList.innerHTML = reports.map((r,i) => {
+      const at = r.at || t.createdAt;
+      const when = fmtDT(at);
+      return (i ? '<hr class="divider">' : '') +
+        `<div class="meta-pa">${esc(r.paName || t.assignedPa || "PA Assigned")}</div>` +
+        `<div class="dtext">${esc(r.text)}</div>` +
+        `<div class="meta-dt">${esc(when)}</div>`;
+    }).join("");
+  }
+  document.getElementById("tkt-modal").classList.add("open");
+}
+
+// Sample ticket — replace with your own data or fetch from Firestore
+const sampleTicket = {
+  ticketCode: "#TK-5472",
+  citizenName: "H Thanuia",
+  phoneNumber: "6301994961",
+  category: "Personal",
+  subCategory: "Water logging",
+  description: "",
+  address: "H THANUIA, D'OHanumappa., BOYINAPALLI, BOYINAPALLI., VIC: Boy arapalle, DsrK: Chittoor, State: Andhra Pradesh, PIN Code: 517423",
+  location: "Constituency",
+  assignedPa: "Thanuja",
+  isSolved: false,
+  createdAt: 1760025440000,
+  resolutionNotes: "",
+  entries: [
+    { paName: "Thanuja", text: "Issue logged by PA Thanuja", at: 1760025440000 }
+  ],
+  latestAt: 1760025440000
+};
+
+renderTicket(sampleTicket);
+</script>
+</body>
+</html>
