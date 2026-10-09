@@ -27,6 +27,52 @@ function docKeyOf(colName, docId){ return colName + "/" + docId; }
 
 function esc(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;") }
 
+// ── Render-time address / issue / report split ─────────────────────────────
+// Legacy tickets keep the scanned address inside `description` (and inside
+// their report entries), prefixed with "Address:". Split them HERE, while
+// rendering only — how tickets are read from and written to Firestore is
+// untouched.
+const ADDRESS_PREFIX = /^\s*Address\s*:/i;
+
+// Address = ticket.address, or the whole description when it is a legacy
+// "Address: …" scan.
+function ticketAddress(t){
+  if (t.address) return String(t.address);
+  if (ADDRESS_PREFIX.test(t.description || "")) return String(t.description).trim();
+  return "";
+}
+
+// Issue = the description itself, except when that description was really
+// only the address (no issue was ever written).
+function ticketIssue(t){
+  if (!t.address && ADDRESS_PREFIX.test(t.description || "")) return "";
+  return String(t.description || "");
+}
+
+// Reports the portal may show: issue text only — address lines and empty
+// entries are skipped, newest first.
+function visibleReports(t){
+  return (Array.isArray(t.entries) ? t.entries : [])
+    .map(e => ({
+      paName: String((e && (e.raisedByPAName || e.paName)) || ""),
+      text:   String((e && (e.text != null ? e.text : e.description)) || "").trim(),
+      at:     Number((e && e.at) || 0)
+    }))
+    .filter(r => r.text && !ADDRESS_PREFIX.test(r.text))
+    .sort((a,b) => b.at - a.at);
+}
+
+// dd-mm-yyyy, hh:mm AM/PM. Defined at load time (not inside initFirestore) so
+// the date column and the Reports list never fall back to locale format while
+// the Firestore SDK is still connecting.
+function fmtDT(ts){
+  const d = new Date(ts);
+  const p = n => String(n).padStart(2,"0");
+  const h = d.getHours(); const ampm = h>=12?"PM":"AM"; const h12 = h%12||12;
+  return `${p(d.getDate())}-${p(d.getMonth()+1)}-${d.getFullYear()}, ${p(h12)}:${p(d.getMinutes())} ${ampm}`;
+}
+window._fmtDT = fmtDT;
+
 // ── Filters ────────────────────────────────────────────────────────────────
 const FILTERS = { q:"", cat:"ALL", status:"ALL", date:"ALL", sort:"DATE_DESC" };
 
@@ -44,7 +90,7 @@ function filtersActive(){
 
 function matchesFilters(t, now){
   if(FILTERS.q){
-    const hay = [t.ticketCode,t.citizenName,t.phoneNumber,t.subCategory,t.location,t.description]
+    const hay = [t.ticketCode,t.citizenName,t.phoneNumber,t.subCategory,t.location,t.description,t.address]
       .join(" ").toLowerCase();
     if(!hay.includes(FILTERS.q)) return false;
   }
@@ -119,7 +165,7 @@ window.renderAll = function(){
   for(const t of tickets){
     const pa = (t.assignedPa&&t.assignedPa!=="PA Assigned"&&t.assignedPa!==t.citizenName)
       ? `<div class="td-pa">PA: ${esc(t.assignedPa)}</div>` : "";
-    const reports = (Array.isArray(t.entries) && t.entries.length) ? t.entries.length : 1;
+    const reports = visibleReports(t).length;
     const latestAt = t.latestAt || t.createdAt;
     const tr=document.createElement("tr");
     tr.innerHTML=`
@@ -265,7 +311,14 @@ function openModal(key){
   document.getElementById("m-loc").textContent=t.location;
   document.getElementById("m-pa").textContent="Added by: "+t.assignedPa;
   document.getElementById("m-date").textContent="Raised on: "+(window._fmtDT?window._fmtDT(t.createdAt):new Date(t.createdAt).toLocaleString());
-  document.getElementById("m-desc").textContent=t.description||"No description provided.";
+  // Address first, then Description (issue only), then Reports below.
+  const addr = ticketAddress(t);
+  const addrCard = document.getElementById("m-addr-card");
+  if(addrCard){
+    addrCard.style.display = addr ? "" : "none";
+    if(addr) document.getElementById("m-addr").textContent = addr;
+  }
+  document.getElementById("m-desc").textContent = ticketIssue(t) || "No issue written";
   const rbox=document.getElementById("m-rbox");
   if(t.isSolved&&t.resolutionNotes){rbox.style.display="";document.getElementById("m-res").textContent=t.resolutionNotes;}
   else rbox.style.display="none";
@@ -284,29 +337,22 @@ function openModal(key){
     banText.textContent="Status: Unsolved / Pending";
     banBadge.className="sbadge s-us"; banBadge.textContent="✗ Unsolved";
   }
-  // Reports: every entry the PA Portal contributed, newest first — PA name,
-  // the issue text it typed, and its date/time. Address/location is never
-  // rendered here (it lives once, on the ticket itself), an entry with no
-  // typed text renders no description line, and a lone entry that only repeats
-  // the ticket's own description is hidden so nothing ever shows twice.
+  // Reports: PA name, issue text and date/time only — newest first. Address
+  // lines ("Address: …") and empty entries are skipped, so the scanned
+  // address is never rendered here; it lives once, in the Address section.
   const repBox  = document.getElementById("m-reports");
   const repList = document.getElementById("m-report-list");
   if(repBox && repList){
-    const entries = (Array.isArray(t.entries) ? t.entries : []).slice()
-      .sort((a,b) => (b.at||0) - (a.at||0));
-    const repeatsDescription = entries.length === 1 &&
-      String(entries[0].description||"") === String(t.description||"");
-    const show = entries.length > 0 && !repeatsDescription;
-    repBox.style.display = show ? "" : "none";
-    repList.innerHTML = show ? entries.map((e,i) => {
-      const at = e.at || t.createdAt;
+    const reports = visibleReports(t);
+    repBox.style.display = reports.length ? "" : "none";
+    repList.innerHTML = reports.map((r,i) => {
+      const at = r.at || t.createdAt;
       const when = window._fmtDT ? window._fmtDT(at) : new Date(at).toLocaleString();
-      const desc = String(e.description||"").trim();
       return (i ? '<hr class="divider">' : '') +
-        `<div class="meta-pa">${esc(e.paName || t.assignedPa || "PA Assigned")}</div>` +
-        (desc ? `<div class="dtext">${esc(desc)}</div>` : '') +
+        `<div class="meta-pa">${esc(r.paName || t.assignedPa || "PA Assigned")}</div>` +
+        `<div class="dtext">${esc(r.text)}</div>` +
         `<div class="meta-dt">${esc(when)}</div>`;
-    }).join("") : "";
+    }).join("");
   }
   document.getElementById("tkt-modal").classList.add("open");
 }
@@ -1005,6 +1051,7 @@ async function initFirestore(){
     const category = rawCat.toLowerCase().includes("personal") ? "Personal" : "Issue";
     const subCategory = extractStr(data,["subCategory","subcategory","title","subject","issueType","problem","department","topic"]) || "General Request";
     const description  = extractStr(data,["description","details","desc","message","issue","content","note","body"]) || "";
+    const address      = extractStr(data,["address","addr","addressLine","fullAddress","scannedAddress","scanned_address"]) || "";
     const location     = extractStr(data,["location","area","address","ward","colony","city","constituency","place"]) || "Constituency";
     const statusStr    = extractStr(data,["status","ticketStatus","state"]) || "";
     const isSolved = data.isSolved===true || data.solved===true ||
@@ -1018,17 +1065,9 @@ async function initFirestore(){
     const entries = parseEntries(data.entries, pa, description, createdAt);
     const latestAt = entries.reduce((m, e) => Math.max(m, e.at || 0), 0) || createdAt;
     return { ticketCode:code, citizenName, phoneNumber:phone, category, subCategory,
-             description, location, assignedPa:pa, isSolved, createdAt, resolutionNotes,
+             description, address, location, assignedPa:pa, isSolved, createdAt, resolutionNotes,
              entries, latestAt };
   }
-
-  function fmtDT(ts) {
-    const d = new Date(ts);
-    const p = n => String(n).padStart(2,"0");
-    const h = d.getHours(); const ampm = h>=12?"PM":"AM"; const h12 = h%12||12;
-    return `${p(d.getDate())}-${p(d.getMonth()+1)}-${d.getFullYear()}, ${p(h12)}:${p(d.getMinutes())} ${ampm}`;
-  }
-  window._fmtDT = fmtDT;
 
   // ── Real-time listener ──────────────────────────────────────────────────
   function startListening() {
