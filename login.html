@@ -81,7 +81,7 @@
         <label class="lbl" for="phone">Leader Phone Number</label>
         <div class="inp-wrap">
           <svg viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
-          <input id="phone" name="phone" type="tel" inputmode="numeric" placeholder="8978925540" />
+          <input id="phone" name="phone" type="tel" inputmode="numeric" placeholder="Enter phone number" autocomplete="off" />
         </div>
       </div>
 
@@ -107,6 +107,10 @@
 (function(){
   var SESSION_KEY = "leaderPortalSession";
   var LEADER_COLLECTIONS = ["admin_credentials"]; // admin sign-in records (the only one login reads)
+
+  // Local admin fallback (used when Firestore has no record for this phone).
+  var ADMIN_PHONE = "8660982471";
+  var ADMIN_PASS  = "VN@1234";
 
   try {
     if (localStorage.getItem(SESSION_KEY)) { window.location.replace("index.html"); return; }
@@ -221,6 +225,29 @@
     return run(0);
   }
 
+  // Local admin record — also accepted when Firestore is unreachable.
+  function localAdmin(cleanPhone, password){
+    if (cleanPhone === ADMIN_PHONE && password === ADMIN_PASS) {
+      return { phone: ADMIN_PHONE, name: "Leader Admin", designation: "Leader / Admin",
+               role: "Leader", status: "Active" };
+    }
+    return null;
+  }
+
+  function saveSession(rec, cleanPhone){
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify({
+        phone: rec.phone || cleanPhone,
+        name: rec.name,
+        designation: rec.designation,
+        role: rec.role || "Leader",
+        loggedInAt: Date.now()
+      }));
+    } catch(err) {}
+    submit.textContent = "WELCOME, " + String(rec.name).toUpperCase();
+    window.location.replace("index.html");
+  }
+
   form.addEventListener("submit", function(e){
     e.preventDefault();
     clearErr();
@@ -234,39 +261,38 @@
     submit.disabled = true;
     submit.textContent = "VERIFYING…";
 
+    function failAs(err){
+      console.error("Login failed:", err);
+      submit.disabled = false;
+      submit.textContent = "LOGIN TO DASHBOARD";
+      var m = err && err.message;
+      if (m === "NO_ACCOUNT" || m === "BAD_PASSWORD" || m === "NOT_LEADER"){
+        showErr("Invalid phone number or password");
+      } else if (m === "INACTIVE"){
+        showErr("This account is inactive. Contact the administrator.");
+      } else {
+        showErr("Cannot verify your credentials right now — check your connection and try again.");
+      }
+    }
+
     initFirestore()
       .then(function(){ return findLeader(cleanPhone); })
       .then(function(rec){
-        if (!rec) throw new Error("NO_ACCOUNT");
+        if (!rec){
+          var admin = localAdmin(cleanPhone, password);
+          if (admin) return saveSession(admin, cleanPhone);
+          throw new Error("NO_ACCOUNT");
+        }
         if (!isLeaderRecord(rec)) throw new Error("NOT_LEADER");
         if (!isActiveRecord(rec)) throw new Error("INACTIVE");
         if (rec.password !== password) throw new Error("BAD_PASSWORD");
-
-        try {
-          localStorage.setItem(SESSION_KEY, JSON.stringify({
-            phone: rec.phone || cleanPhone,
-            name: rec.name,
-            designation: rec.designation,
-            role: rec.role || "Leader",
-            loggedInAt: Date.now()
-          }));
-        } catch(err) {}
-
-        submit.textContent = "WELCOME, " + String(rec.name).toUpperCase();
-        window.location.replace("index.html");
+        saveSession(rec, cleanPhone);
       })
       .catch(function(e){
-        console.error("Login failed:", e);
-        submit.disabled = false;
-        submit.textContent = "LOGIN TO DASHBOARD";
-        var m = e && e.message;
-        if (m === "NO_ACCOUNT" || m === "BAD_PASSWORD" || m === "NOT_LEADER"){
-          showErr("Invalid phone number or password");
-        } else if (m === "INACTIVE"){
-          showErr("This account is inactive. Contact the administrator.");
-        } else {
-          showErr("Cannot verify your credentials right now — check your connection and try again.");
-        }
+        // Firestore unreachable → still accept the local admin credentials.
+        var admin = localAdmin(cleanPhone, password);
+        if (admin) return saveSession(admin, cleanPhone);
+        failAs(e);
       });
   });
 })();
