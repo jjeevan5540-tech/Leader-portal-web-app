@@ -50,16 +50,17 @@ function ticketIssue(t){
 }
 
 // Reports the portal may show: issue text only — address lines and empty
-// entries are skipped, newest first.
+// entries are skipped, ordered by their stable issue serial (ascending).
 function visibleReports(t){
   return (Array.isArray(t.entries) ? t.entries : [])
     .map(e => ({
+      issueNo: Number((e && e.issueNo) || 0),
       paName: String((e && (e.raisedByPAName || e.paName)) || ""),
       text:   String((e && (e.text != null ? e.text : e.description)) || "").trim(),
       at:     Number((e && e.at) || 0)
     }))
     .filter(r => r.text && !ADDRESS_PREFIX.test(r.text))
-    .sort((a,b) => b.at - a.at);
+    .sort((a,b) => (a.issueNo - b.issueNo) || (a.at - b.at));
 }
 
 // dd-mm-yyyy, hh:mm AM/PM. Defined at load time (not inside initFirestore) so
@@ -217,7 +218,7 @@ function dedupeEntries(list){
     if(!e) continue;
     const k = e.src
       ? "s:" + e.src
-      : "v:" + String(e.paName||"") + "|" + String(e.description||"") + "|" + String(e.at||"");
+      : "v:" + String(e.issueNo||"") + "|" + String(e.paName||"") + "|" + String(e.description||"") + "|" + String(e.at||"");
     if(seen.has(k)) continue;
     seen.add(k);
     out.push(e);
@@ -225,15 +226,37 @@ function dedupeEntries(list){
   return out;
 }
 
-// A report entry may never carry an address — strip everything but the four
-// allowed fields at the point where the list is about to be written.
+// A report entry may never carry an address — strip everything but the allowed
+// fields (including the stable issue serial) where the list is about to be written.
 function allowEntry(e){
   return {
+    issueNo: Number((e && e.issueNo) || 0),
     paName: String((e && e.paName) || ""),
     description: String((e && e.description) || ""),
     at: Number((e && e.at) || 0),
     src: String((e && e.src) || "")
   };
+}
+
+// Assigns a stable issue serial to any entry that lacks one, in stored order,
+// and reports whether anything changed. Numbers already stored on an entry are
+// never recomputed, so existing issues keep their original IDs when new issues
+// are appended later. The raw entry objects are preserved untouched apart from
+// the added `issueNo`, so no description or extra field is ever lost.
+function withIssueNos(rawEntries){
+  if(!Array.isArray(rawEntries)) return { changed:false, entries:rawEntries };
+  const readNo = e => Number(e && (e.issueNo ?? e.issueNumber ?? e.issue_no ?? e.serial)) || 0;
+  let maxNo = 0;
+  rawEntries.forEach(e => { const n = readNo(e); if(n > maxNo) maxNo = n; });
+  let changed = false;
+  const entries = rawEntries.map(e => {
+    if(!e || typeof e !== "object") return e;
+    if(readNo(e) > 0) return e;
+    maxNo += 1;
+    changed = true;
+    return Object.assign({}, e, { issueNo: maxNo });
+  });
+  return { changed, entries };
 }
 
 function reconcileTickets(){
@@ -337,9 +360,10 @@ function openModal(key){
     banText.textContent="Status: Unsolved / Pending";
     banBadge.className="sbadge s-us"; banBadge.textContent="✗ Unsolved";
   }
-  // Reports: PA name, issue text and date/time only — newest first. Address
-  // lines ("Address: …") and empty entries are skipped, so the scanned
-  // address is never rendered here; it lives once, in the Address section.
+  // Reports: each issue on its own block, numbered by its stable serial and
+  // sorted ascending. Address lines ("Address: …") and empty entries are
+  // skipped, so the scanned address is never rendered here; it lives once, in
+  // the Address section.
   const repBox  = document.getElementById("m-reports");
   const repList = document.getElementById("m-report-list");
   if(repBox && repList){
@@ -349,9 +373,12 @@ function openModal(key){
       const at = r.at || t.createdAt;
       const when = window._fmtDT ? window._fmtDT(at) : new Date(at).toLocaleString();
       return (i ? '<hr class="divider">' : '') +
-        `<div class="meta-pa">${esc(r.paName || t.assignedPa || "PA Assigned")}</div>` +
-        `<div class="dtext">${esc(r.text)}</div>` +
-        `<div class="meta-dt">${esc(when)}</div>`;
+        `<div class="rep-head">` +
+          `<span class="rep-no">Issue #${r.issueNo || (i+1)}</span>` +
+          `<span class="rep-when">${esc(when)}</span>` +
+        `</div>` +
+        `<div class="rep-pa">${esc(r.paName || t.assignedPa || "PA Assigned")}</div>` +
+        `<div class="rep-txt">${esc(r.text)}</div>`;
     }).join("");
   }
   document.getElementById("tkt-modal").classList.add("open");
@@ -1017,9 +1044,9 @@ async function initFirestore(){
     return Date.now();
   }
 
-  // Report entries: one entry per PA who raised the ticket. An entry is an
-  // ALLOWLIST of exactly four fields — address/location is never carried into
-  // an entry, whatever extra keys the source document happens to have.
+  // Report entries: one entry per PA who raised the ticket. An entry carries a
+  // stable issue serial plus the allowed fields — address/location is never
+  // carried into an entry, whatever extra keys the source document has.
   function parseEntries(raw, fallbackPa, fallbackDesc, fallbackAt) {
     const out = [];
     if (Array.isArray(raw)) {
@@ -1027,6 +1054,7 @@ async function initFirestore(){
         if (!e || typeof e !== "object") return;
         const at = parseTs(e.at ?? e.createdAt ?? e.timestamp ?? e.date ?? null);
         const entry = {
+          issueNo: Number(e.issueNo ?? e.issueNumber ?? e.issue_no ?? e.serial ?? 0) || 0,
           paName: String(e.paName || e.pa || e.assignedPa || e.raisedBy || "").trim() || fallbackPa,
           description: String(e.description || e.desc || e.text || e.details || "").trim(),
           at: at,
@@ -1036,8 +1064,14 @@ async function initFirestore(){
       });
     }
     if (!out.length) {
-      out.push({ paName: fallbackPa, description: fallbackDesc || "", at: fallbackAt, src: "" });
+      out.push({ issueNo: 1, paName: fallbackPa, description: fallbackDesc || "", at: fallbackAt, src: "" });
     }
+    // Give any entry that lacks a serial the next free number, in stored order.
+    // Numbers already stored are never recomputed, so existing issues keep their
+    // original IDs when new issues are appended later.
+    let maxNo = 0;
+    out.forEach(e => { if (e.issueNo > maxNo) maxNo = e.issueNo; });
+    out.forEach(e => { if (!e.issueNo) { maxNo += 1; e.issueNo = maxNo; } });
     return out.sort((a, b) => (a.at || 0) - (b.at || 0));
   }
 
@@ -1086,7 +1120,17 @@ async function initFirestore(){
               delete window._ticketStore[key];
               delete window._colMap[key];
             } else {
-              const data  = change.doc.data ? change.doc.data() : {};
+              let data = change.doc.data ? change.doc.data() : {};
+              // Persist a stable issue serial on any entry that lacks one, so
+              // existing issues keep their IDs when new ones are appended.
+              if (Array.isArray(data.entries)) {
+                const fixed = withIssueNos(data.entries);
+                if (fixed.changed) {
+                  data = Object.assign({}, data, { entries: fixed.entries });
+                  setDoc(doc(db, colName, docId), { entries: fixed.entries }, { merge: true })
+                    .catch(e => console.warn("issueNo backfill write failed:", e && e.message));
+                }
+              }
               const t = fromDoc(docId, data);
               t.docKey = key;
               t.colName = colName;
@@ -1100,6 +1144,11 @@ async function initFirestore(){
           });
           window.renderAll();
           reconcileTickets();
+          // Keep an open ticket modal live: repaint it when its ticket changes.
+          if (activeKey) {
+            if (window._ticketStore[activeKey]) openModal(activeKey);
+            else closeModal();
+          }
         }, err => {
           console.warn("Firestore error:", colName, err.message);
         });

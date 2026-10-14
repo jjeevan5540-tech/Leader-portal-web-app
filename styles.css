@@ -139,6 +139,11 @@ tbody td{padding:10px 14px;font-size:13px;white-space:nowrap;vertical-align:midd
   border-radius:8px;padding:10px}
 .rlbl{font-size:11px;font-weight:700;color:var(--sg);margin-bottom:2px}
 .rtxt{font-size:12px;color:var(--nd)}
+.rep-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px}
+.rep-no{font-size:12px;font-weight:800;color:var(--navy)}
+.rep-when{font-size:11px;color:#64748B;font-weight:500}
+.rep-pa{font-size:12px;font-weight:700;color:#0F1F4D;margin-top:2px}
+.rep-txt{font-size:13px;color:var(--nd);line-height:1.6;margin-top:3px;white-space:pre-wrap;word-break:break-word}
 .st-banner{border-radius:10px;padding:12px 14px;display:flex;
   align-items:center;justify-content:space-between}
 .st-bann-l{display:flex;align-items:center;gap:8px}
